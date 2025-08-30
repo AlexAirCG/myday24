@@ -8,20 +8,19 @@ import clsx from "clsx";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Map of links to display in the side navigation.
-// Depending on the size of the application, this would be stored in a database.
+// Карта ссылок для отображения в боковой навигации.
 const links = [
-  { name: "Calendar", href: "/dashboard", icon: CalendarDateRangeIcon },
+  { name: "Календарь", href: "/dashboard", icon: CalendarDateRangeIcon },
   {
-    name: "Todo",
+    name: "Дела",
     href: "/dashboard/todo",
     icon: ClipboardDocumentListIcon,
   },
-  { name: "Shop", href: "/dashboard/shop", icon: ShoppingCartIcon },
+  { name: "Покупки", href: "/dashboard/shop", icon: ShoppingCartIcon },
 ];
 
 export default function NavLinks() {
-  const pathName = usePathname();
+  const pathName = usePathname(); // текущий путь пользователя из URL.
   return (
     <>
       {links.map((link) => {
