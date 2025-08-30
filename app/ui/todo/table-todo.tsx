@@ -5,7 +5,7 @@ export default async function TableTodo() {
   const todos = await fetchTodo();
 
   return (
-    <div className="mt-6 flow-root">
+    <div className="flow-root">
       <div className=" min-w-full text-gray-900">
         <div className="bg-amber-100">
           {todos.map((todo, index) => (
