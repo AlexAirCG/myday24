@@ -1,7 +1,4 @@
 import { inter } from "@/app/ui/fonts";
-import Search from "@/app/ui/search";
-import { CreateTodoTask } from "@/app/ui/todo/buttons";
-import CreateTodo from "@/app/ui/todo/create-todo";
 import TableTodo from "@/app/ui/todo/table-todo";
 
 export default function Page() {
