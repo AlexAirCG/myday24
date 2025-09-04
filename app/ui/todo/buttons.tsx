@@ -1,3 +1,4 @@
+import { deleteTodoTask } from "@/app/lib/actions";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 
@@ -10,5 +11,14 @@ export function CreateTodoTask() {
       <span className="hidden md:block">Create Invoice</span>{" "}
       <PlusIcon className="h-5 md:ml-4" />
     </Link>
+  );
+}
+
+export function DeleteTodo({ title }: { title: string }) {
+  const deleteTodoWithId = deleteTodoTask.bind(null, title);
+  return (
+    <form action={deleteTodoWithId}>
+      <button type="submit">Delete</button>
+    </form>
   );
 }

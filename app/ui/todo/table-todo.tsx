@@ -1,5 +1,7 @@
 import { fetchTodo } from "@/app/lib/data";
 import { TbArrowsUpDown } from "react-icons/tb";
+import CreateTodo from "./create-todo";
+import { DeleteTodo } from "./buttons";
 
 export default async function TableTodo() {
   const todos = await fetchTodo();
@@ -7,6 +9,7 @@ export default async function TableTodo() {
   return (
     <div className="flow-root">
       <div className=" min-w-full text-gray-900">
+        <CreateTodo />
         <div className="bg-amber-100">
           {todos.map((todo, index) => (
             <div
@@ -21,7 +24,8 @@ export default async function TableTodo() {
 
               <div className="flex p-1 md:p-2 justify-end gap-3">
                 <div className="w-7 h-7 bg-amber-700"></div>
-                <div className="w-7 h-7 bg-blue-700"></div>
+                {/* <div className="w-7 h-7 bg-blue-700"></div> */}
+                <DeleteTodo title={todo.title} />
               </div>
             </div>
           ))}

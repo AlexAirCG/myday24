@@ -1,7 +1,8 @@
 import { inter } from "@/app/ui/fonts";
+import CreateTodo from "@/app/ui/todo/create-todo";
 import TableTodo from "@/app/ui/todo/table-todo";
 
-export default function Page() {
+export default async function Page() {
   return (
     <div className="w-full">
       <div className="flex w-full items-center justify-between">
