@@ -1,6 +1,8 @@
 import { deleteTodoTask } from "@/app/lib/actions";
 import { PlusIcon } from "@heroicons/react/24/outline";
+import { IoTrashOutline } from "react-icons/io5";
 import Link from "next/link";
+import { FiEdit3 } from "react-icons/fi";
 
 export function CreateTodoTask() {
   return (
@@ -14,11 +16,21 @@ export function CreateTodoTask() {
   );
 }
 
+export function UpdateInvoiceTodo({ id }: { id: string }) {
+  return (
+    <Link href={`/dashboard/todo/${id}/edit`} className="p-1">
+      <FiEdit3 className="w-5 h-5 hover:text-green-700" />
+    </Link>
+  );
+}
+
 export function DeleteTodo({ title }: { title: string }) {
   const deleteTodoWithId = deleteTodoTask.bind(null, title);
   return (
-    <form action={deleteTodoWithId}>
-      <button type="submit">Delete</button>
+    <form className="flex items-center" action={deleteTodoWithId}>
+      <button className="p-1" type="submit">
+        <IoTrashOutline className="w-5 h-5 cursor-pointer hover:text-red-500" />
+      </button>
     </form>
   );
 }
