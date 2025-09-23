@@ -1,4 +1,4 @@
-import { fetchTodo, fetchTodoById } from "@/app/lib/data";
+import { fetchTodo } from "@/app/lib/data";
 import { TbArrowsUpDown } from "react-icons/tb";
 import CreateTodo from "./create-todo";
 import { DeleteTodo, UpdateInvoiceTodo } from "./buttons";
