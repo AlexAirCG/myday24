@@ -17,6 +17,9 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
   const [todos, setTodos] = useState<Todo[]>(initialTodos);
   const [currentTodo, setCurrentTodo] = useState("");
 
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchMoveY, setTouchMoveY] = useState<number | null>(null);
+
   const dragStartHandler = (
     e: React.DragEvent<HTMLDivElement>,
     todo: string
@@ -51,13 +54,48 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     (e.target as HTMLElement).style.boxShadow = "";
   };
 
-  const sortCard = (a: Todo, b: Todo) => {
-    if (a.id > b.id) {
-      return 1;
-    } else {
-      return -1;
+  // Touch event handlers
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>, todo: string) => {
+    if (e.touches.length === 1) {
+      setCurrentTodo(todo);
+      setTouchStartY(e.touches[0].clientY);
     }
   };
+
+  const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1 && touchStartY !== null) {
+      setTouchMoveY(e.touches[0].clientY);
+    }
+  };
+
+  const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>, todo: string) => {
+    if (
+      touchStartY !== null &&
+      touchMoveY !== null &&
+      Math.abs(touchMoveY - touchStartY) > 30 // порог срабатывания, например 30px
+    ) {
+      // Определяем, вверх или вниз перетаскивание
+      const isDown = touchMoveY > touchStartY;
+
+      // Находим индекс текущего элемента и элемента назначения
+      const currentIndex = todos.findIndex((t) => t.id === todo);
+      const targetIndex = isDown
+        ? Math.min(currentIndex + 1, todos.length - 1)
+        : Math.max(currentIndex - 1, 0);
+
+      const newTodos = [...todos];
+      const [movedItem] = newTodos.splice(currentIndex, 1);
+      newTodos.splice(targetIndex, 0, movedItem);
+      setTodos(newTodos);
+    }
+
+    // Очистка состояний
+    setTouchStartY(null);
+    setTouchMoveY(null);
+    setCurrentTodo("");
+  };
+
+  const sortCard = (a: Todo, b: Todo) => (a.id > b.id ? 1 : -1);
 
   return (
     <div className="flow-root">
@@ -72,6 +110,9 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
               onDragEnd={(e) => dragEndHabdler(e)}
               onDragOver={(e) => dragOverHabdler(e)}
               onDrop={(e) => dropHabdler(e, todo.id)}
+              onTouchStart={(e) => onTouchStart(e, todo.id)}
+              onTouchMove={(e) => onTouchMove(e)}
+              onTouchEnd={(e) => onTouchEnd(e, todo.id)}
               className="flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm cursor-move"
             >
               <div className="p-1 md:p-2">
