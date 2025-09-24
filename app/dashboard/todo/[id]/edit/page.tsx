@@ -1,4 +1,4 @@
-import { fetchTodo, fetchTodoById } from "@/app/lib/data";
+import { fetchTodoById } from "@/app/lib/data";
 import Breadcrumbs from "@/app/ui/todo/breadcrumbs";
 import EditTodo from "@/app/ui/todo/edit-todo";
 
