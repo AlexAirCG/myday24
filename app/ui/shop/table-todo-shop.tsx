@@ -27,6 +27,25 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
 
   const [touchXY, setTouchXY] = useState<{ x: number; y: number } | null>(null);
 
+  // Создание тени для мыши
+  const createShadow = (e: React.DragEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLElement).style.boxShadow =
+      "0 10px 20px rgba(0, 0, 0, 0.6)";
+  };
+  // Создание тени для touch
+  const createShadowTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLElement).style.boxShadow =
+      "0 10px 20px rgba(0, 0, 0, 0.6)";
+  };
+  // Очистка тени для мыши
+  const clearShadow = (e: React.DragEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLElement).style.boxShadow = "";
+  };
+  // Очистка тени для touch
+  const clearShadowTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLElement).style.boxShadow = "";
+  };
+
   // HTML5 DnD (мышь)
   const onDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
     setDragId(id);
@@ -34,12 +53,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
 
   const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    (e.currentTarget as HTMLElement).style.boxShadow =
-      "0 10px 20px rgba(0, 0, 0, 0.6)";
-  };
-
-  const clearShadow = (e: React.DragEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLElement).style.boxShadow = "";
+    createShadow(e);
   };
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
@@ -65,6 +79,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     e.preventDefault();
     const t = e.touches[0];
     setTouchXY({ x: t.clientX, y: t.clientY });
+    createShadowTouch(e);
   };
 
   const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -96,7 +111,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
       const to = todos.findIndex((t) => t.id === targetId);
       setTodos((prev) => move(prev, from, to));
     }
-
+    clearShadowTouch(e);
     setDragId(null);
     setTouchXY(null);
   };
