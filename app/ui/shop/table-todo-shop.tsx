@@ -443,6 +443,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
       ref={containerRef}
       onTouchMoveCapture={onTouchMoveCapture}
       onTouchEndCapture={onTouchEndCapture}
+      style={{ touchAction: "pan-y" }}
     >
       <div className="min-w-full text-gray-900">
         <div className="bg-amber-100">
@@ -460,7 +461,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
                 onDragEnd={clearShadow}
                 onDrop={(e) => onRowDrop(e, todo.id)}
                 className={[
-                  "flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm touch-none select-none transition-shadow",
+                  "flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm select-none transition-shadow",
                   "shadow-[0_4px_8px_rgba(0,0,0,0.3)]",
                   isDragging ? "opacity-0" : "",
                   isHover
@@ -472,7 +473,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
                 <button
                   type="button"
                   aria-label="Перетащить"
-                  className="p-1 md:p-2 cursor-grab active:cursor-grabbing"
+                  className="p-1 md:p-2 cursor-grab active:cursor-grabbing touch-none"
                   draggable
                   onDragStart={(e) => onHandleDragStart(e, todo.id)}
                   onTouchStart={(e) => onHandleTouchStart(e, todo.id)}
