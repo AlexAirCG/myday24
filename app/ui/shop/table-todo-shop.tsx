@@ -21,15 +21,15 @@ function move<T>(arr: T[], from: number, to: number) {
 }
 
 // Ближайший ancestor с data-id
-// function getIdFromNode(node: HTMLElement | null): string | null {
-//   let el: HTMLElement | null = node;
-//   while (el) {
-//     const id = el.dataset?.id;
-//     if (id) return id;
-//     el = el.parentElement;
-//   }
-//   return null;
-// }
+function getIdFromNode(node: HTMLElement | null): string | null {
+  let el: HTMLElement | null = node;
+  while (el) {
+    const id = el.dataset?.id;
+    if (id) return id;
+    el = el.parentElement;
+  }
+  return null;
+}
 
 // elementFromPoint, игнорируя перетаскиваемый элемент
 function elementFromPointIgnoringDragged(
@@ -87,31 +87,6 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     null
   );
 
-  // const onMouseDragOverCapture = (e: React.DragEvent<HTMLDivElement>) => {
-  //   if (!dragId) return;
-  //   e.preventDefault(); // важно: разрешает drop и даёт частые dragover-события
-
-  //   const x = e.clientX;
-  //   const y = e.clientY;
-
-  //   const scrollEl = getScrollParent(containerRef.current);
-  //   autoScrollIfNearEdgeXY(scrollEl, x, y);
-
-  //   const el = elementFromPointIgnoringDragged(x, y, dragId);
-  //   const targetId = getIdFromNode(el);
-  //   setHoverId(targetId ?? null);
-
-  //   if (targetId && targetId !== dragId) {
-  //     setTodos((prev) => {
-  //       const from = prev.findIndex((t) => t.id === dragId);
-  //       const to = prev.findIndex((t) => t.id === targetId);
-  //       return move(prev, from, to);
-  //     });
-  //   }
-
-  //   // косметика для курсора
-  //   if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-  // };
   const onMouseDragOverCapture = (e: React.DragEvent<HTMLDivElement>) => {
     if (!dragId) return;
     e.preventDefault();
@@ -263,39 +238,11 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     }
   };
 
-  // const onRowDragOver = (
-  //   e: React.DragEvent<HTMLDivElement>,
-  //   targetId: string
-  // ) => {
-  //   e.preventDefault();
-  //   createShadow(e);
-  //   if (!dragId) return;
-
-  //   setHoverId(targetId);
-
-  //   if (targetId && targetId !== dragId) {
-  //     setTodos((prev) => {
-  //       const from = prev.findIndex((t) => t.id === dragId);
-  //       const to = prev.findIndex((t) => t.id === targetId);
-  //       return move(prev, from, to);
-  //     });
-  //   }
-  // };
   const onRowDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     createShadow(e);
-    // Больше НИЧЕГО не делаем здесь (никаких setTodos)
   };
 
-  // const onRowDrop = (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
-  //   e.preventDefault();
-  //   if (!dragId) return;
-  //   const from = todos.findIndex((t) => t.id === dragId);
-  //   const to = todos.findIndex((t) => t.id === targetId);
-  //   setTodos((prev) => move(prev, from, to));
-  //   clearShadow(e);
-  //   setDragId(null);
-  // };
   const onRowDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     clearShadow(e);
@@ -342,32 +289,9 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
   // глобальные обработчики touch-перетаскивания во время активного dnd
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // const onTouchMoveCapture = (e: React.TouchEvent<HTMLDivElement>) => {
-  //   if (!dragId) return;
-  //   e.preventDefault();
-  //   const t = e.touches[0];
-  //   const x = t.clientX;
-  //   const y = t.clientY;
-  //   setTouchXY({ x, y });
-
-  //   autoScrollIfNearEdge(y);
-
-  //   const el = elementFromPointIgnoringDragged(x, y, dragId);
-  //   const targetId = getIdFromNode(el);
-  //   setHoverId(targetId ?? null);
-
-  //   if (targetId && targetId !== dragId) {
-  //     setTodos((prev) => {
-  //       const from = prev.findIndex((t) => t.id === dragId);
-  //       const to = prev.findIndex((t) => t.id === targetId);
-  //       return move(prev, from, to);
-  //     });
-  //   }
-  // };
   const onTouchMoveCapture = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!dragId) return;
     e.preventDefault();
-
     const t = e.touches[0];
     const x = t.clientX;
     const y = t.clientY;
@@ -376,30 +300,16 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     autoScrollIfNearEdge(y);
 
     const el = elementFromPointIgnoringDragged(x, y, dragId);
-    const row = el ? (el.closest("[data-id]") as HTMLElement | null) : null;
+    const targetId = getIdFromNode(el);
+    setHoverId(targetId ?? null);
 
-    if (!row) {
-      setHoverId(null);
-      return;
+    if (targetId && targetId !== dragId) {
+      setTodos((prev) => {
+        const from = prev.findIndex((t) => t.id === dragId);
+        const to = prev.findIndex((t) => t.id === targetId);
+        return move(prev, from, to);
+      });
     }
-
-    const targetId = row.dataset.id!;
-    setHoverId(targetId);
-
-    setTodos((prev) => {
-      const from = prev.findIndex((tt) => tt.id === dragId);
-      const to = prev.findIndex((tt) => tt.id === targetId);
-      if (from === -1 || to === -1) return prev;
-
-      const rect = row.getBoundingClientRect();
-      const overBottomHalf = y - rect.top > rect.height / 2;
-
-      let insertIndex = to + (overBottomHalf ? 1 : 0);
-      if (from < insertIndex) insertIndex -= 1;
-
-      if (insertIndex === from) return prev;
-      return move(prev, from, insertIndex);
-    });
   };
 
   const onTouchEndCapture = () => {
@@ -426,7 +336,6 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
         <div className="bg-amber-100">
           {todos.map((todo) => {
             const isDragging = dragId === todo.id;
-            // const isHover = hoverId === todo.id && !isDragging;
 
             return (
               <div
@@ -441,9 +350,6 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
                   "flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm select-none transition-shadow",
                   "shadow-[0_4px_8px_rgba(0,0,0,0.3)]",
                   isDragging ? "opacity-0" : "",
-                  // isHover
-                  //   ? "ring-2 ring-amber-400 shadow-[0_8px_10px_rgba(0,0,0,0.6)]"
-                  //   : "",
                 ].join(" ")}
               >
                 {/* Ручка DnD: ТОЛЬКО тут можно начать перетаскивать */}
