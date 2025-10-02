@@ -21,15 +21,15 @@ function move<T>(arr: T[], from: number, to: number) {
 }
 
 // Ближайший ancestor с data-id
-function getIdFromNode(node: HTMLElement | null): string | null {
-  let el: HTMLElement | null = node;
-  while (el) {
-    const id = el.dataset?.id;
-    if (id) return id;
-    el = el.parentElement;
-  }
-  return null;
-}
+// function getIdFromNode(node: HTMLElement | null): string | null {
+//   let el: HTMLElement | null = node;
+//   while (el) {
+//     const id = el.dataset?.id;
+//     if (id) return id;
+//     el = el.parentElement;
+//   }
+//   return null;
+// }
 
 // elementFromPoint, игнорируя перетаскиваемый элемент
 function elementFromPointIgnoringDragged(
@@ -136,7 +136,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
 
     setTodos((prev) => {
       const from = prev.findIndex((t) => t.id === dragId);
-      let to = prev.findIndex((t) => t.id === targetId);
+      const to = prev.findIndex((t) => t.id === targetId);
       if (from === -1 || to === -1) return prev;
 
       const rect = row.getBoundingClientRect();
@@ -388,7 +388,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
 
     setTodos((prev) => {
       const from = prev.findIndex((tt) => tt.id === dragId);
-      let to = prev.findIndex((tt) => tt.id === targetId);
+      const to = prev.findIndex((tt) => tt.id === targetId);
       if (from === -1 || to === -1) return prev;
 
       const rect = row.getBoundingClientRect();
@@ -426,7 +426,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
         <div className="bg-amber-100">
           {todos.map((todo) => {
             const isDragging = dragId === todo.id;
-            const isHover = hoverId === todo.id && !isDragging;
+            // const isHover = hoverId === todo.id && !isDragging;
 
             return (
               <div
