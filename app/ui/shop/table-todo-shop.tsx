@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { DeleteTodo, UpdateInvoiceTodo } from "../todo/buttons";
 import { TbArrowsUpDown } from "react-icons/tb";
+import { GiCheckMark } from "react-icons/gi";
+import { CheckboxTodo } from "../todo/checkbox-todo";
 
 interface Todo {
   id: string;
@@ -12,6 +14,7 @@ interface Props {
   todos: Todo[];
 }
 
+// move: Функция для перемещения элемента в массиве. Она копирует исходный массив, удаляет элемент по индексу from и вставляет его на новый индекс to.
 function move<T>(arr: T[], from: number, to: number) {
   if (from === -1 || to === -1 || from === to) return arr;
   const copy = [...arr];
@@ -21,6 +24,8 @@ function move<T>(arr: T[], from: number, to: number) {
 }
 
 // elementFromPoint, игнорируя перетаскиваемый элемент
+// Эта функция получает элемент на экране по координатам, игнорируя тот, который перетаскивается. Это
+// позволяет избежать выбора самого перетаскиваемого элемента.
 function elementFromPointIgnoringDragged(
   x: number,
   y: number,
@@ -42,6 +47,7 @@ function elementFromPointIgnoringDragged(
   return el;
 }
 
+// Эта функция возвращает ближайший элемент, который может прокручиваться в контейнере. Это нужно для того, чтобы при перетаскивании автоматически прокручивать список, если курсор находится близко к краю экрана.
 function getScrollParent(el: HTMLElement | null): HTMLElement {
   let node: HTMLElement | null = el;
   while (node && node !== document.body) {
@@ -60,22 +66,29 @@ function getScrollParent(el: HTMLElement | null): HTMLElement {
 }
 
 export default function TableTodoShop({ todos: initialTodos }: Props) {
+  // Состояние для списка задач.
   const [todos, setTodos] = useState<Todo[]>(initialTodos);
 
   // DnD state
+  // Идентификатор текущей перетаскиваемой задачи.
   const [dragId, setDragId] = useState<string | null>(null);
+  // Идентификатор задачи, на которую наведена перетаскиваемая.
   const [hoverId, setHoverId] = useState<string | null>(null);
 
   // Touch preview state
+  // Координаты касания для мобильных устройств.
   const [touchXY, setTouchXY] = useState<{ x: number; y: number } | null>(null);
+  // Смещение курсора относительно элемента.
   const [dragOffset, setDragOffset] = useState<{
     dx: number;
     dy: number;
   } | null>(null);
+  // Размеры перетаскиваемого элемента.
   const [dragSize, setDragSize] = useState<{ w: number; h: number } | null>(
     null
   );
 
+  // Обработчик для события перетаскивания с помощью мыши. Он предотвращает стандартное поведение и обновляет состояние списка задач, чтобы переместить задачу.
   const onMouseDragOverCapture = (e: React.DragEvent<HTMLDivElement>) => {
     if (!dragId) return;
     e.preventDefault();
@@ -119,7 +132,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
   };
 
-  // throttle для автоскролла
+  // Функции автоскроллинга
   const lastAutoScroll = useRef<number>(0);
   function autoScrollIfNearEdgeXY(
     container: HTMLElement,
@@ -127,10 +140,10 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     y: number
   ) {
     const now = performance.now();
-    if (now - lastAutoScroll.current < 16) return; // ~60fps
+    if (now - lastAutoScroll.current < 1) return; // ~60fps
 
-    const margin = 60; // "чувствительная зона" возле краёв
-    const speed = 14; // пикселей за тик
+    const margin = 150; // "чувствительная зона" возле краёв
+    const speed = 50; // пикселей за тик
 
     const rect = container.getBoundingClientRect();
 
@@ -142,18 +155,10 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
       container.scrollTop += speed;
       lastAutoScroll.current = now;
     }
-
-    // (по желанию) Горизонтальный
-    if (x < rect.left + margin) {
-      container.scrollLeft -= speed;
-      lastAutoScroll.current = now;
-    } else if (x > rect.right - margin) {
-      container.scrollLeft += speed;
-      lastAutoScroll.current = now;
-    }
   }
 
   // ==== МЫШЬ (HTML5 DnD) ==== (стартуем ТОЛЬКО с ручки)
+  // Создаёт теневой эффект для элемента, когда начинается перетаскивание.
   const createShadow = (e: React.DragEvent<HTMLElement>) => {
     (e.currentTarget as HTMLElement).style.boxShadow =
       "0 8px 10px rgba(0,0,0,0.6)";
@@ -164,7 +169,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
 
   // Хранилище клона для мыши
   const dragImageRef = useRef<HTMLElement | null>(null);
-
+  // Обработчик события начала перетаскивания. Создаёт "призрак" элемента (внешний вид клонированного элемента), который будет перемещаться по экрану при перетаскивании.
   const onHandleDragStart = (
     e: React.DragEvent<HTMLButtonElement>,
     id: string
@@ -240,6 +245,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
   };
 
   // ==== TOUCH DnD (стартуем ТОЛЬКО с ручки) ====
+  // Аналогичные обработчики для мобильных устройств с поддержкой касания. Обрабатывает начальную точку касания и начинает процесс перетаскивания.
   const onHandleTouchStart = (
     e: React.TouchEvent<HTMLButtonElement>,
     id: string
@@ -360,17 +366,18 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
                 <button
                   type="button"
                   aria-label="Перетащить"
-                  className="p-1 md:p-2 cursor-grab active:cursor-grabbing touch-none"
+                  className="p-1 cursor-grab active:cursor-grabbing touch-none border-gray-500 border-2 rounded hover:border-gray-800 m-1"
                   draggable
                   onDragStart={(e) => onHandleDragStart(e, todo.id)}
                   onTouchStart={(e) => onHandleTouchStart(e, todo.id)}
                 >
-                  <TbArrowsUpDown className="w-5 h-5" />
+                  <TbArrowsUpDown className="w-5 h-5 " />
                 </button>
 
-                <div className="w-full select-text">{todo.title}</div>
+                <div className="w-full ml-2 select-text">{todo.title}</div>
 
                 <div className="flex p-1 md:p-1 items-center justify-end">
+                  <CheckboxTodo />
                   <UpdateInvoiceTodo id={todo.id} />
                   <DeleteTodo title={todo.title} />
                 </div>
@@ -406,6 +413,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
             <div className="w-full">{draggingTodo.title}</div>
             <div className="flex p-1 md:p-1 items-center justify-end">
               {/* Некликабельно из-за pointer-events: none на враппере */}
+
               <UpdateInvoiceTodo id={draggingTodo.id} />
               <DeleteTodo title={draggingTodo.title} />
             </div>
