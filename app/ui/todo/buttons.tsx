@@ -18,8 +18,10 @@ export function CreateTodoTask() {
 
 export function UpdateInvoiceTodo({ id }: { id: string }) {
   return (
-    <Link href={`/dashboard/todo/${id}/edit`} className="p-1">
-      <FiEdit3 className="w-5 h-5 hover:text-green-700" />
+    <Link href={`/dashboard/todo/${id}/edit`}>
+      <button className="p-1 border-gray-500 border-2 rounded hover:border-blue-700 cursor-pointer">
+        <FiEdit3 className="w-5 h-5 hover:text-blue-700 " />
+      </button>
     </Link>
   );
 }
@@ -28,8 +30,11 @@ export function DeleteTodo({ title }: { title: string }) {
   const deleteTodoWithId = deleteTodoTask.bind(null, title);
   return (
     <form className="flex items-center" action={deleteTodoWithId}>
-      <button className="p-1" type="submit">
-        <IoTrashOutline className="w-5 h-5 cursor-pointer hover:text-red-500" />
+      <button
+        className="p-1 border-gray-500 border-2 rounded hover:border-red-700 ml-1 cursor-pointer"
+        type="submit"
+      >
+        <IoTrashOutline className="w-5 h-5  hover:text-red-700" />
       </button>
     </form>
   );
