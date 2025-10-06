@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DeleteTodo, UpdateInvoiceTodo } from "../todo/buttons";
 import { TbArrowsUpDown } from "react-icons/tb";
-import { GiCheckMark } from "react-icons/gi";
 import { CheckboxTodo } from "../todo/checkbox-todo";
+import CreateTodo from "../todo/create-todo";
+import { reorderTodos } from "@/app/lib/actions";
 
 interface Todo {
   id: string;
@@ -64,10 +65,19 @@ function getScrollParent(el: HTMLElement | null): HTMLElement {
   // fallback — страница
   return (document.scrollingElement as HTMLElement) || document.documentElement;
 }
-
-export default function TableTodoShop({ todos: initialTodos }: Props) {
+// export default function TableTodoShop({ todos: initialTodos }: Props) {
+export default function TableTodoShop({ todos }: Props) {
   // Состояние для списка задач.
-  const [todos, setTodos] = useState<Todo[]>(initialTodos);
+  // const [todos, setTodos] = useState<Todo[]>(initialTodos);
+  const [list, setList] = useState<Todo[]>(todos);
+
+  // хранить снимок для отката
+  const snapshotRef = useRef<Todo[] | null>(null);
+
+  // СИНХРОНИЗАЦИЯ: когда пропсы меняются — обновляем локальный список
+  useEffect(() => {
+    setList(todos);
+  }, [todos]);
 
   // DnD state
   // Идентификатор текущей перетаскиваемой задачи.
@@ -111,7 +121,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     const targetId = row.dataset.id!;
     setHoverId(targetId);
 
-    setTodos((prev) => {
+    setList((prev) => {
       const from = prev.findIndex((t) => t.id === dragId);
       const to = prev.findIndex((t) => t.id === targetId);
       if (from === -1 || to === -1) return prev;
@@ -221,14 +231,25 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     }
   };
 
-  const onRowDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+  const onRowDragEnd = async (e: React.DragEvent<HTMLDivElement>) => {
     clearShadow(e);
-    setHoverId(null);
-    setDragId(null);
-    // Сносим временный клон
-    if (dragImageRef.current) {
-      dragImageRef.current.remove();
-      dragImageRef.current = null;
+    try {
+      // делаем снимок до отправки (на случай отката)
+      if (!snapshotRef.current) snapshotRef.current = list;
+
+      await reorderTodos(list.map((t) => t.id));
+      snapshotRef.current = null; // успех — снимок не нужен
+    } catch (err) {
+      // откат если серверный апдейт не прошёл
+      if (snapshotRef.current) setList(snapshotRef.current);
+    } finally {
+      setHoverId(null);
+      setDragId(null);
+      // убрать временный клон, как у вас уже сделано
+      if (dragImageRef.current) {
+        dragImageRef.current.remove();
+        dragImageRef.current = null;
+      }
     }
   };
 
@@ -306,7 +327,7 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
     const targetId = row.dataset.id!;
     setHoverId(targetId);
 
-    setTodos((prev) => {
+    setList((prev) => {
       const from = prev.findIndex((tt) => tt.id === dragId);
       const to = prev.findIndex((tt) => tt.id === targetId);
       if (from === -1 || to === -1) return prev;
@@ -343,8 +364,9 @@ export default function TableTodoShop({ todos: initialTodos }: Props) {
       style={{ touchAction: "pan-y", overflowY: "auto" }} // overflowY по месту
     >
       <div className="min-w-full text-gray-900">
+        <CreateTodo />
         <div className="bg-amber-100">
-          {todos.map((todo) => {
+          {list.map((todo) => {
             const isDragging = dragId === todo.id;
 
             return (
