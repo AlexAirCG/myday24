@@ -1,6 +1,5 @@
 import { fetchTodo } from "@/app/lib/data";
 import { inter } from "@/app/ui/fonts";
-import TableTodoShop from "@/app/ui/shop/table-todo-shop";
 import CreateTodo from "@/app/ui/todo/create-todo";
 
 export default async function Page() {
@@ -11,7 +10,7 @@ export default async function Page() {
         <h1 className={`${inter.className} text-2xl`}>Дела</h1>
       </div>
       <CreateTodo />
-      <TableTodoShop todos={todos} />
+      {/* <TableTodoShop todos={todos} /> */}
     </div>
   );
 }

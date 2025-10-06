@@ -8,7 +8,7 @@ export async function fetchTodo() {
     const todos = sql<Todo[]>`
       SELECT todo_myday.title, todo_myday.id
       FROM todo_myday
-      ORDER BY sort_order
+      ORDER BY sort_order ASC, id ASC
      `;
     return todos;
   } catch (error) {

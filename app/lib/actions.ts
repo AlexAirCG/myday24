@@ -12,19 +12,38 @@ const FormSchema = z.object({
 });
 
 const CreateInvoice = FormSchema.omit({ id: true });
-// Создание задачи
+
 export async function createTodoFetch(formData: FormData) {
-  const { title } = CreateInvoice.parse({
-    title: formData.get("title"),
-  });
+  const title = String(formData.get("title") || "").trim();
+  if (!title) return;
 
   await sql`
-    INSERT INTO todo_myday (title, sort_order)
-    VALUES (${title}, 1)
+    INSERT INTO todo_myday (id, title, completed, sort_order)
+    VALUES (gen_random_uuid(), ${title}, false,
+      COALESCE((SELECT MAX(sort_order) + 1 FROM todo_myday), 1)
+    )
   `;
 
   revalidatePath("/dashboard/todo");
 }
+
+export async function reorderTodos(ids: string[]) {
+  if (!ids?.length) return;
+
+  await sql`
+    WITH data AS (
+      SELECT id, ord::int AS pos
+      FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS u(id, ord)
+    )
+    UPDATE todo_myday AS t
+    SET sort_order = d.pos
+    FROM data d
+    WHERE t.id = d.id
+  `;
+
+  revalidatePath("/dashboard/todo");
+}
+
 // Изменение задачи
 export async function updateTodo(id: string, formData: FormData) {
   const { title } = FormSchema.parse({
