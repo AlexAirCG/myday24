@@ -166,6 +166,26 @@ export default function TableTodoShop({ todos }: Props) {
     }
   }
 
+  // Унифицируем коммит порядка (и откат при ошибке)
+  async function persistOrderAndCleanup() {
+    try {
+      await reorderTodos(list.map((t) => t.id));
+      snapshotRef.current = null;
+    } catch (err) {
+      if (snapshotRef.current) setList(snapshotRef.current);
+    } finally {
+      setHoverId(null);
+      setDragId(null);
+      setTouchXY(null);
+      setDragOffset(null);
+      setDragSize(null);
+      if (dragImageRef.current) {
+        dragImageRef.current.remove();
+        dragImageRef.current = null;
+      }
+    }
+  }
+
   // ==== МЫШЬ (HTML5 DnD) ==== (стартуем ТОЛЬКО с ручки)
   // Создаёт теневой эффект для элемента, когда начинается перетаскивание.
   const createShadow = (e: React.DragEvent<HTMLElement>) => {
@@ -183,6 +203,9 @@ export default function TableTodoShop({ todos }: Props) {
     e: React.DragEvent<HTMLButtonElement>,
     id: string
   ) => {
+    // фиксируем список ДО изменений для возможного отката
+    snapshotRef.current = list;
+
     setDragId(id);
 
     const row = (e.currentTarget as HTMLElement).closest(
@@ -232,24 +255,25 @@ export default function TableTodoShop({ todos }: Props) {
 
   const onRowDragEnd = async (e: React.DragEvent<HTMLDivElement>) => {
     clearShadow(e);
-    try {
-      // делаем снимок до отправки (на случай отката)
-      if (!snapshotRef.current) snapshotRef.current = list;
+    await persistOrderAndCleanup();
+    // try {
+    //   // делаем снимок до отправки (на случай отката)
+    //   if (!snapshotRef.current) snapshotRef.current = list;
 
-      await reorderTodos(list.map((t) => t.id));
-      snapshotRef.current = null; // успех — снимок не нужен
-    } catch (err) {
-      // откат если серверный апдейт не прошёл
-      if (snapshotRef.current) setList(snapshotRef.current);
-    } finally {
-      setHoverId(null);
-      setDragId(null);
-      // убрать временный клон, как у вас уже сделано
-      if (dragImageRef.current) {
-        dragImageRef.current.remove();
-        dragImageRef.current = null;
-      }
-    }
+    //   await reorderTodos(list.map((t) => t.id));
+    //   snapshotRef.current = null; // успех — снимок не нужен
+    // } catch (err) {
+    //   // откат если серверный апдейт не прошёл
+    //   if (snapshotRef.current) setList(snapshotRef.current);
+    // } finally {
+    //   setHoverId(null);
+    //   setDragId(null);
+    //   // убрать временный клон, как у вас уже сделано
+    //   if (dragImageRef.current) {
+    //     dragImageRef.current.remove();
+    //     dragImageRef.current = null;
+    //   }
+    // }
   };
 
   const onRowDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -271,6 +295,10 @@ export default function TableTodoShop({ todos }: Props) {
     id: string
   ) => {
     if (e.touches.length !== 1) return;
+
+    // фиксируем список ДО изменений для возможного отката
+    snapshotRef.current = list;
+
     const t = e.touches[0];
     const row = (e.currentTarget as HTMLElement).closest(
       "[data-id]"
@@ -342,29 +370,29 @@ export default function TableTodoShop({ todos }: Props) {
     });
   };
 
-  const onTouchEndCapture = () => {
+  const onTouchEndCapture = async () => {
     if (!dragId) return;
-    setDragId(null);
-    setTouchXY(null);
-    setDragOffset(null);
-    setDragSize(null);
-    setHoverId(null);
+    await persistOrderAndCleanup();
+    // setDragId(null);
+    // setTouchXY(null);
+    // setDragOffset(null);
+    // setDragSize(null);
+    // setHoverId(null);
   };
 
-  const draggingTodo = dragId ? todos.find((t) => t.id === dragId) : null;
+  //  touchcancel — иногда система отменяет жест
+  const onTouchCancelCapture = async () => {
+    if (!dragId) return;
+    await persistOrderAndCleanup();
+  };
+
+  const draggingTodo = dragId ? list.find((t) => t.id === dragId) : null;
 
   return (
-    <div
-      className="flow-root"
-      // ref={containerRef}
-      // onTouchMoveCapture={onTouchMoveCapture}
-      // onTouchEndCapture={onTouchEndCapture}
-      // onDragOverCapture={onMouseDragOverCapture}
-      // style={{ touchAction: "pan-y", overflowY: "auto" }} // overflowY по месту
-    >
+    <div className="flow-root">
       <div className="min-w-full text-gray-900">
         <CreateTodo />
-        <div className="bg-amber-100">
+        <div className="bg-amber-100" ref={containerRef}>
           {list.map((todo) => {
             const isDragging = dragId === todo.id;
             const isHover = hoverId === todo.id && dragId !== todo.id; // не подсвечаем сам перетаскиваемый
@@ -377,9 +405,9 @@ export default function TableTodoShop({ todos }: Props) {
                 onDragLeave={clearShadow}
                 onDragEnd={onRowDragEnd}
                 onDrop={onRowDrop}
-                ref={containerRef}
                 onTouchMoveCapture={onTouchMoveCapture}
                 onTouchEndCapture={onTouchEndCapture}
+                onTouchCancelCapture={onTouchCancelCapture}
                 onDragOverCapture={onMouseDragOverCapture}
                 style={{ touchAction: "pan-y", overflowY: "auto" }} // overflowY по месту
                 className={[
