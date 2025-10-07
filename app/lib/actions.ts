@@ -11,8 +11,6 @@ const FormSchema = z.object({
   title: z.string(),
 });
 
-const CreateInvoice = FormSchema.omit({ id: true });
-
 export async function createTodoFetch(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   if (!title) return;

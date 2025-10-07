@@ -68,7 +68,6 @@ function getScrollParent(el: HTMLElement | null): HTMLElement {
 // export default function TableTodoShop({ todos: initialTodos }: Props) {
 export default function TableTodoShop({ todos }: Props) {
   // Состояние для списка задач.
-  // const [todos, setTodos] = useState<Todo[]>(initialTodos);
   const [list, setList] = useState<Todo[]>(todos);
 
   // хранить снимок для отката
@@ -357,18 +356,18 @@ export default function TableTodoShop({ todos }: Props) {
   return (
     <div
       className="flow-root"
-      ref={containerRef}
-      onTouchMoveCapture={onTouchMoveCapture}
-      onTouchEndCapture={onTouchEndCapture}
-      onDragOverCapture={onMouseDragOverCapture} // <-- добавили
-      style={{ touchAction: "pan-y", overflowY: "auto" }} // overflowY по месту
+      // ref={containerRef}
+      // onTouchMoveCapture={onTouchMoveCapture}
+      // onTouchEndCapture={onTouchEndCapture}
+      // onDragOverCapture={onMouseDragOverCapture}
+      // style={{ touchAction: "pan-y", overflowY: "auto" }} // overflowY по месту
     >
       <div className="min-w-full text-gray-900">
         <CreateTodo />
         <div className="bg-amber-100">
           {list.map((todo) => {
             const isDragging = dragId === todo.id;
-
+            const isHover = hoverId === todo.id && dragId !== todo.id; // не подсвечаем сам перетаскиваемый
             return (
               <div
                 key={todo.id}
@@ -378,10 +377,16 @@ export default function TableTodoShop({ todos }: Props) {
                 onDragLeave={clearShadow}
                 onDragEnd={onRowDragEnd}
                 onDrop={onRowDrop}
+                ref={containerRef}
+                onTouchMoveCapture={onTouchMoveCapture}
+                onTouchEndCapture={onTouchEndCapture}
+                onDragOverCapture={onMouseDragOverCapture}
+                style={{ touchAction: "pan-y", overflowY: "auto" }} // overflowY по месту
                 className={[
                   "flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm select-none transition-shadow",
                   "shadow-[0_4px_8px_rgba(0,0,0,0.3)]",
                   isDragging ? "opacity-0" : "",
+                  isHover ? "ring-2 ring-amber-400" : "",
                 ].join(" ")}
               >
                 {/* Ручка DnD: ТОЛЬКО тут можно начать перетаскивать */}
