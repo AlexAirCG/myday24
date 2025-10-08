@@ -256,24 +256,6 @@ export default function TableTodoShop({ todos }: Props) {
   const onRowDragEnd = async (e: React.DragEvent<HTMLDivElement>) => {
     clearShadow(e);
     await persistOrderAndCleanup();
-    // try {
-    //   // делаем снимок до отправки (на случай отката)
-    //   if (!snapshotRef.current) snapshotRef.current = list;
-
-    //   await reorderTodos(list.map((t) => t.id));
-    //   snapshotRef.current = null; // успех — снимок не нужен
-    // } catch (err) {
-    //   // откат если серверный апдейт не прошёл
-    //   if (snapshotRef.current) setList(snapshotRef.current);
-    // } finally {
-    //   setHoverId(null);
-    //   setDragId(null);
-    //   // убрать временный клон, как у вас уже сделано
-    //   if (dragImageRef.current) {
-    //     dragImageRef.current.remove();
-    //     dragImageRef.current = null;
-    //   }
-    // }
   };
 
   const onRowDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -373,11 +355,6 @@ export default function TableTodoShop({ todos }: Props) {
   const onTouchEndCapture = async () => {
     if (!dragId) return;
     await persistOrderAndCleanup();
-    // setDragId(null);
-    // setTouchXY(null);
-    // setDragOffset(null);
-    // setDragSize(null);
-    // setHoverId(null);
   };
 
   //  touchcancel — иногда система отменяет жест
