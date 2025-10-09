@@ -10,6 +10,7 @@ import { reorderTodos } from "@/app/lib/actions";
 interface Todo {
   id: string;
   title: string;
+  completed: boolean;
 }
 interface Props {
   todos: Todo[];
@@ -388,8 +389,9 @@ export default function TableTodoShop({ todos }: Props) {
                 onDragOverCapture={onMouseDragOverCapture}
                 style={{ touchAction: "pan-y", overflowY: "auto" }} // overflowY по месту
                 className={[
-                  "flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm select-none transition-shadow",
-                  "shadow-[0_4px_8px_rgba(0,0,0,0.3)]",
+                  `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm select-none transition-shadow",
+                  "shadow-[0_4px_8px_rgba(0,0,0,0.3)]
+                  ${todo.completed ? "opacity-40" : ""}`,
                   isDragging ? "opacity-0" : "",
                   isHover ? "ring-2 ring-amber-400" : "",
                 ].join(" ")}
@@ -406,10 +408,16 @@ export default function TableTodoShop({ todos }: Props) {
                   <TbArrowsUpDown className="w-5 h-5 " />
                 </button>
 
-                <div className="w-full ml-2 select-text">{todo.title}</div>
+                <div
+                  className={`w-full ml-2 select-text ${
+                    todo.completed ? "line-through text-gray-400" : ""
+                  }`}
+                >
+                  {todo.title}
+                </div>
 
                 <div className="flex p-1 md:p-1 items-center justify-end">
-                  <CheckboxTodo />
+                  <CheckboxTodo id={todo.id} completed={todo.completed} />
                   <UpdateInvoiceTodo id={todo.id} />
                   <DeleteTodo title={todo.title} />
                 </div>

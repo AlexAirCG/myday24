@@ -19,7 +19,7 @@ export function CreateTodoTask() {
 export function UpdateInvoiceTodo({ id }: { id: string }) {
   return (
     <Link href={`/dashboard/todo/${id}/edit`}>
-      <button className="p-1 border-gray-500 border-2 rounded hover:border-blue-700 cursor-pointer">
+      <button className="p-1 border-gray-500 border-2 rounded hover:border-blue-700 cursor-pointer active:bg-blue-700 transition-colors duration-150 ease-out">
         <FiEdit3 className="w-5 h-5 hover:text-blue-700 " />
       </button>
     </Link>
@@ -31,7 +31,7 @@ export function DeleteTodo({ title }: { title: string }) {
   return (
     <form className="flex items-center" action={deleteTodoWithId}>
       <button
-        className="p-1 border-gray-500 border-2 rounded hover:border-red-700 ml-1 cursor-pointer"
+        className="p-1 border-gray-500 border-2 rounded hover:border-red-700 ml-1 cursor-pointer active:bg-red-700 transition-colors duration-150 ease-out"
         type="submit"
       >
         <IoTrashOutline className="w-5 h-5  hover:text-red-700" />
