@@ -63,3 +63,13 @@ export async function deleteTodoTask(title: string) {
   await sql`DELETE FROM todo_myday WHERE title = ${title}`;
   revalidatePath("/dashboard/todo");
 }
+
+// Зделанные задачи
+export async function toggleTodo(id: string) {
+  await sql`
+    UPDATE todo_myday
+    SET completed = NOT completed
+    WHERE id = ${id}
+  `;
+  revalidatePath("/dashboard/todo");
+}
