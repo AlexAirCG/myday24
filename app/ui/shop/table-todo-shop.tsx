@@ -349,6 +349,22 @@ export default function TableTodoShop({ todos }: Props) {
     setHoverId(id);
   };
 
+  // const autoScrollIfNearEdge = (y: number) => {
+  //   const now = performance.now();
+  //   if (now - lastAutoScroll.current < 16) return; // ~60fps
+  //   const margin = 60;
+  //   const speed = 14;
+
+  //   const vh = window.innerHeight;
+  //   if (y < margin) {
+  //     window.scrollBy(0, -speed);
+  //     lastAutoScroll.current = now;
+  //   } else if (y > vh - margin) {
+  //     window.scrollBy(0, speed);
+  //     lastAutoScroll.current = now;
+  //   }
+  // };
+
   // глобальные обработчики touch-перетаскивания во время активного dnd
   const containerRef = useRef<HTMLDivElement | null>(null);
 
