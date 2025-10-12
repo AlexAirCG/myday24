@@ -25,22 +25,22 @@ export async function createTodoFetch(formData: FormData) {
   revalidatePath("/dashboard/todo");
 }
 
-export async function reorderTodos(ids: string[]) {
-  if (!ids?.length) return;
+// export async function reorderTodos(ids: string[]) {
+//   if (!ids?.length) return;
 
-  await sql`
-    WITH data AS (
-      SELECT id, ord::int AS pos
-      FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS u(id, ord)
-    )
-    UPDATE todo_myday AS t
-    SET sort_order = d.pos
-    FROM data d
-    WHERE t.id = d.id
-  `;
+//   await sql`
+//     WITH data AS (
+//       SELECT id, ord::int AS pos
+//       FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS u(id, ord)
+//     )
+//     UPDATE todo_myday AS t
+//     SET sort_order = d.pos
+//     FROM data d
+//     WHERE t.id = d.id
+//   `;
 
-  revalidatePath("/dashboard/todo");
-}
+//   revalidatePath("/dashboard/todo");
+// }
 
 // Изменение задачи
 export async function updateTodo(id: string, formData: FormData) {
