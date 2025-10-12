@@ -5,7 +5,6 @@ import { DeleteTodo, UpdateInvoiceTodo } from "../todo/buttons";
 import { TbArrowsUpDown } from "react-icons/tb";
 import { CheckboxTodo } from "../todo/checkbox-todo";
 import CreateTodo from "../todo/create-todo";
-import { reorderTodos } from "@/app/lib/actions";
 
 interface Todo {
   id: string;
@@ -25,8 +24,7 @@ function move<T>(arr: T[], from: number, to: number) {
   return copy;
 }
 
-// elementFromPoint, игнорируя перетаскиваемый элемент
-// Эта функция получает элемент на экране по координатам, игнорируя тот, который перетаскивается. Это
+// функция получает элемент на экране по координатам, игнорируя тот, который перетаскивается. Это
 // позволяет избежать выбора самого перетаскиваемого элемента.
 function elementFromPointIgnoringDragged(
   x: number,
@@ -49,7 +47,7 @@ function elementFromPointIgnoringDragged(
   return el;
 }
 
-// Эта функция возвращает ближайший элемент, который может прокручиваться в контейнере. Это нужно для того, чтобы при перетаскивании автоматически прокручивать список, если курсор находится близко к краю экрана.
+// функция возвращает ближайший элемент, который может прокручиваться в контейнере. Это нужно для того, чтобы при перетаскивании автоматически прокручивать список, если курсор находится близко к краю экрана.
 function getScrollParent(el: HTMLElement | null): HTMLElement {
   let node: HTMLElement | null = el;
   while (node && node !== document.body) {
@@ -66,13 +64,60 @@ function getScrollParent(el: HTMLElement | null): HTMLElement {
   // fallback — страница
   return (document.scrollingElement as HTMLElement) || document.documentElement;
 }
-// export default function TableTodoShop({ todos: initialTodos }: Props) {
+
 export default function TableTodoShop({ todos }: Props) {
   // Состояние для списка задач.
   const [list, setList] = useState<Todo[]>(todos);
 
   // хранить снимок для отката
   const snapshotRef = useRef<Todo[] | null>(null);
+
+  // подсветка последней задачи
+  const prevIdsRef = useRef<Set<string>>(new Set(todos.map((t) => t.id)));
+  const lastCreatedIdRef = useRef<string | null>(null);
+
+  function flashRow(el: HTMLElement) {
+    el.classList.add("ring-2", "ring-emerald-400", "animate-pulse");
+    setTimeout(() => {
+      el.classList.remove("ring-2", "ring-emerald-400", "animate-pulse");
+    }, 1200);
+  }
+
+  // скролл последней задачи
+  useEffect(() => {
+    // находим новый id (которого раньше не было)
+    const prev = prevIdsRef.current;
+    const nextSet = new Set(todos.map((t) => t.id));
+    let newId: string | null = null;
+    for (const t of todos) {
+      if (!prev.has(t.id)) {
+        newId = t.id;
+        break;
+      }
+    }
+    prevIdsRef.current = nextSet;
+
+    // обновляем локальный список
+    setList(todos);
+
+    // если появился новый todo — скроллим к нему после монтирования
+    if (newId) {
+      lastCreatedIdRef.current = newId;
+      // ждём кадр, чтобы DOM успел отрендериться
+      requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLElement>(`[data-id="${newId}"]`);
+        if (el) {
+          // прокрутка к элементу; родитель сам выберется (страница или скролл-контейнер)
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          flashRow(el);
+        } else {
+          // запасной вариант — прокрутка в самый низ видимого контейнера
+          const container = containerRef.current;
+          if (container) container.scrollTop = container.scrollHeight;
+        }
+      });
+    }
+  }, [todos]);
 
   // СИНХРОНИЗАЦИЯ: когда пропсы меняются — обновляем локальный список
   useEffect(() => {
@@ -150,7 +195,7 @@ export default function TableTodoShop({ todos }: Props) {
     y: number
   ) {
     const now = performance.now();
-    if (now - lastAutoScroll.current < 1) return; // ~60fps
+    if (now - lastAutoScroll.current < 16) return; // ~60fps
 
     const margin = 150; // "чувствительная зона" возле краёв
     const speed = 50; // пикселей за тик
@@ -170,7 +215,15 @@ export default function TableTodoShop({ todos }: Props) {
   // Унифицируем коммит порядка (и откат при ошибке)
   async function persistOrderAndCleanup() {
     try {
-      await reorderTodos(list.map((t) => t.id));
+      const res = await fetch("/api/todos/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: list.map((t) => t.id) }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to reorder");
+      }
+
       snapshotRef.current = null;
     } catch (err) {
       if (snapshotRef.current) setList(snapshotRef.current);
@@ -296,22 +349,6 @@ export default function TableTodoShop({ todos }: Props) {
     setHoverId(id);
   };
 
-  const autoScrollIfNearEdge = (y: number) => {
-    const now = performance.now();
-    if (now - lastAutoScroll.current < 16) return; // ~60fps
-    const margin = 60;
-    const speed = 14;
-
-    const vh = window.innerHeight;
-    if (y < margin) {
-      window.scrollBy(0, -speed);
-      lastAutoScroll.current = now;
-    } else if (y > vh - margin) {
-      window.scrollBy(0, speed);
-      lastAutoScroll.current = now;
-    }
-  };
-
   // глобальные обработчики touch-перетаскивания во время активного dnd
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -324,7 +361,10 @@ export default function TableTodoShop({ todos }: Props) {
     const y = t.clientY;
     setTouchXY({ x, y });
 
-    autoScrollIfNearEdge(y);
+    // autoScrollIfNearEdge(y);
+    // >>> автоскроллим именно скролл-контейнер (родителя), а не окно
+    const scrollEl = getScrollParent(containerRef.current as HTMLElement);
+    autoScrollIfNearEdgeXY(scrollEl, x, y);
 
     const el = elementFromPointIgnoringDragged(x, y, dragId);
     const row = el ? (el.closest("[data-id]") as HTMLElement | null) : null;
@@ -369,11 +409,10 @@ export default function TableTodoShop({ todos }: Props) {
   return (
     <div className="flow-root">
       <div className="min-w-full text-gray-900">
-        <CreateTodo />
+        {/* <CreateTodo /> */}
         <div className="bg-amber-100" ref={containerRef}>
           {list.map((todo) => {
             const isDragging = dragId === todo.id;
-            const isHover = hoverId === todo.id && dragId !== todo.id; // не подсвечаем сам перетаскиваемый
             return (
               <div
                 key={todo.id}
@@ -387,13 +426,12 @@ export default function TableTodoShop({ todos }: Props) {
                 onTouchEndCapture={onTouchEndCapture}
                 onTouchCancelCapture={onTouchCancelCapture}
                 onDragOverCapture={onMouseDragOverCapture}
-                style={{ touchAction: "pan-y", overflowY: "auto" }} // overflowY по месту
+                // ВАЖНО: убрали overflowY: "auto"
+                style={{ touchAction: "pan-y" }} // overflowY по месту
                 className={[
-                  `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm select-none transition-shadow",
-                  "shadow-[0_4px_8px_rgba(0,0,0,0.3)]
+                  `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-sm select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
                   ${todo.completed ? "opacity-40" : ""}`,
                   isDragging ? "opacity-0" : "",
-                  isHover ? "ring-2 ring-amber-400" : "",
                 ].join(" ")}
               >
                 {/* Ручка DnD: ТОЛЬКО тут можно начать перетаскивать */}
