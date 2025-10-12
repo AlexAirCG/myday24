@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DeleteTodo, UpdateInvoiceTodo } from "../todo/buttons";
 import { TbArrowsUpDown } from "react-icons/tb";
 import { CheckboxTodo } from "../todo/checkbox-todo";
-import CreateTodo from "../todo/create-todo";
 
 interface Todo {
   id: string;
@@ -80,49 +79,56 @@ export default function TableTodoShop({ todos }: Props) {
     el.classList.add("ring-2", "ring-emerald-400", "animate-pulse");
     setTimeout(() => {
       el.classList.remove("ring-2", "ring-emerald-400", "animate-pulse");
-    }, 1200);
+    }, 500);
   }
 
-  // скролл последней задачи
+  // 1) Один эффект: синхронизируем список и фиксируем id новой задачи
   useEffect(() => {
     // находим новый id (которого раньше не было)
     const prev = prevIdsRef.current;
     const nextSet = new Set(todos.map((t) => t.id));
-    let newId: string | null = null;
-    for (const t of todos) {
-      if (!prev.has(t.id)) {
-        newId = t.id;
-        break;
-      }
-    }
+    const newTodo = todos.find((t) => !prev.has(t.id)) || null;
+
     prevIdsRef.current = nextSet;
 
     // обновляем локальный список
     setList(todos);
 
-    // если появился новый todo — скроллим к нему после монтирования
-    if (newId) {
-      lastCreatedIdRef.current = newId;
-      // ждём кадр, чтобы DOM успел отрендериться
-      requestAnimationFrame(() => {
-        const el = document.querySelector<HTMLElement>(`[data-id="${newId}"]`);
-        if (el) {
-          // прокрутка к элементу; родитель сам выберется (страница или скролл-контейнер)
-          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-          flashRow(el);
-        } else {
-          // запасной вариант — прокрутка в самый низ видимого контейнера
-          const container = containerRef.current;
-          if (container) container.scrollTop = container.scrollHeight;
-        }
-      });
-    }
+    // запоминаем для скролла после коммита
+    lastCreatedIdRef.current = newTodo?.id ?? null;
   }, [todos]);
 
-  // СИНХРОНИЗАЦИЯ: когда пропсы меняются — обновляем локальный список
-  useEffect(() => {
-    setList(todos);
-  }, [todos]);
+  // 2) Скроллим ПОСЛЕ того, как DOM обновился
+  useLayoutEffect(() => {
+    const id = lastCreatedIdRef.current;
+    if (!id) return;
+
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.querySelector<HTMLElement>(`[data-id="${id}"]`);
+      if (el) {
+        // block: 'end' или 'center' обычно надёжнее, чем 'nearest'
+        el.scrollIntoView({
+          block: "end",
+          inline: "nearest",
+          behavior: "smooth",
+        });
+        flashRow(el);
+        lastCreatedIdRef.current = null;
+      } else if (attempts++ < 3) {
+        // Если элемент ещё не в DOM, подождём 1–2 кадра
+        requestAnimationFrame(tryScroll);
+      } else {
+        // Фоллбек — прокрутить в самый низ скролл-контейнер/страницу
+        const scrollEl = getScrollParent(containerRef.current);
+        if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+        lastCreatedIdRef.current = null;
+      }
+    };
+
+    // Ждём кадр после коммита и пробуем
+    requestAnimationFrame(tryScroll);
+  }, [list.length]); // можно [list.length], если порядок часто меняется
 
   // DnD state
   // Идентификатор текущей перетаскиваемой задачи.
@@ -349,22 +355,6 @@ export default function TableTodoShop({ todos }: Props) {
     setHoverId(id);
   };
 
-  // const autoScrollIfNearEdge = (y: number) => {
-  //   const now = performance.now();
-  //   if (now - lastAutoScroll.current < 16) return; // ~60fps
-  //   const margin = 60;
-  //   const speed = 14;
-
-  //   const vh = window.innerHeight;
-  //   if (y < margin) {
-  //     window.scrollBy(0, -speed);
-  //     lastAutoScroll.current = now;
-  //   } else if (y > vh - margin) {
-  //     window.scrollBy(0, speed);
-  //     lastAutoScroll.current = now;
-  //   }
-  // };
-
   // глобальные обработчики touch-перетаскивания во время активного dnd
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -425,7 +415,6 @@ export default function TableTodoShop({ todos }: Props) {
   return (
     <div className="flow-root">
       <div className="min-w-full text-gray-900">
-        {/* <CreateTodo /> */}
         <div className="bg-amber-100" ref={containerRef}>
           {list.map((todo) => {
             const isDragging = dragId === todo.id;
