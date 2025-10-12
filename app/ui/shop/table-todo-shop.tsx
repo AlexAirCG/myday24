@@ -203,8 +203,8 @@ export default function TableTodoShop({ todos }: Props) {
     const now = performance.now();
     if (now - lastAutoScroll.current < 16) return; // ~60fps
 
-    const margin = 150; // "чувствительная зона" возле краёв
-    const speed = 50; // пикселей за тик
+    const margin = 60; // "чувствительная зона" возле краёв
+    const speed = 14; // пикселей за тик
 
     const rect = container.getBoundingClientRect();
 
