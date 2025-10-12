@@ -6,7 +6,7 @@ import CreateTodo from "@/app/ui/todo/create-todo";
 export default async function Page() {
   const todos = await fetchTodo();
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-[100svh] md:h-full flex-col overflow-hidden">
       {/* Фиксированная шапка */}
       <div className="sticky top-0 z-10 flex flex-col w-full bg-amber-100 md:p-2">
         <h1 className={`${inter.className} text-2xl md:mb-6`}>Дела</h1>
@@ -14,7 +14,10 @@ export default async function Page() {
       </div>
 
       {/* Прокручиваемая часть */}
-      <div className="flex-1 overflow-y-auto md:p-2">
+      <div
+        className="flex-1 overflow-y-auto md:p-2 overscroll-contain"
+        style={{ WebkitOverflowScrolling: "touch" }} // инерция на iOS
+      >
         <TableTodoShop todos={todos} />
       </div>
     </div>
