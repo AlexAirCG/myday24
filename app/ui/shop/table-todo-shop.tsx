@@ -415,7 +415,7 @@ export default function TableTodoShop({ todos }: Props) {
   return (
     <div className="flow-root">
       <div className="min-w-full text-gray-900">
-        <div className="bg-amber-100" ref={containerRef}>
+        <div className="bg-sky-200" ref={containerRef}>
           {list.map((todo) => {
             const isDragging = dragId === todo.id;
             return (

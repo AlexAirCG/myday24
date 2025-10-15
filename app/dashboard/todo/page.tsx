@@ -8,7 +8,7 @@ export default async function Page() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Фиксированная шапка (не прокручивается) */}
-      <div className="sticky top-0 z-10 flex flex-col w-full bg-amber-100 md:p-2">
+      <div className="sticky top-0 z-10 flex flex-col w-full bg-sky-200 md:p-2">
         <h1 className={`${inter.className} text-2xl md:mb-6`}>Дела</h1>
         <CreateTodo />
       </div>
