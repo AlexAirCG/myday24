@@ -8,14 +8,14 @@ export default function SideNav() {
   return (
     <div className="flex flex-col p-2 md:h-full md:px-2">
       <Link
-        className="mb-2 flex  items-center justify-between rounded-md bg-blue-600 p-2 md:h-40 bg-gradient-to-br from-blue-100 to-blue-800"
+        className="mb-2 flex  items-center justify-between rounded-md bg-blue-600 p-2 md:h-40 bg-gradient-to-br from-blue-200 to-blue-600"
         href="/dashboard"
       >
         <div className=" text-white ">
           <AcmeLogo />
         </div>
         <form className="md:hidden">
-          <button className=" rounded-md bg-gradient-to-br from-blue-100 to-blue-800 shadow-[0_4px_8px_rgba(0,0,0,0.5)] p-1 mr-2 hover:bg-gradient-to-bl hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3 ">
+          <button className=" rounded-md bg-gradient-to-br from-blue-200 to-blue-600 shadow-[0_4px_8px_rgba(0,0,0,0.5)] p-1 mr-2 hover:bg-gradient-to-bl hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3 ">
             <IoPowerSharp className="w-6 h-6 text-amber-50" />
           </button>
         </form>

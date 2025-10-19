@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DeleteTodo, UpdateInvoiceTodo } from "../todo/buttons";
 import { TbArrowsUpDown } from "react-icons/tb";
 import { CheckboxTodo } from "../todo/checkbox-todo";
+import { toggleTodo } from "@/app/lib/actions";
 
 interface Todo {
   id: string;
@@ -412,6 +413,24 @@ export default function TableTodoShop({ todos }: Props) {
 
   const draggingTodo = dragId ? list.find((t) => t.id === dragId) : null;
 
+  // оптимистическое обновление
+  async function handleToggleOptimistic(id: string, next: boolean) {
+    // оптимистично обновляем UI
+    setList((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
+    );
+
+    // пробуем отправить на сервер
+    try {
+      await toggleTodo(id); // если toggleTodo принимает только id
+    } catch (e) {
+      // откат при ошибке
+      setList((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, completed: !next } : t))
+      );
+    }
+  }
+
   return (
     <div className="flow-root">
       <div className="min-w-full text-gray-900">
@@ -460,7 +479,11 @@ export default function TableTodoShop({ todos }: Props) {
                 </div>
 
                 <div className="flex p-1 md:p-1 items-center justify-end">
-                  <CheckboxTodo id={todo.id} completed={todo.completed} />
+                  <CheckboxTodo
+                    id={todo.id}
+                    completed={todo.completed}
+                    onToggle={(next) => handleToggleOptimistic(todo.id, next)}
+                  />
                   <UpdateInvoiceTodo id={todo.id} />
                   <DeleteTodo title={todo.title} />
                 </div>
