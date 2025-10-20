@@ -1,8 +1,10 @@
-import { deleteTodoTask } from "@/app/lib/actions";
+"use client";
+import { DeleteState, deleteTodoTask } from "@/app/lib/actions";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { IoTrashOutline } from "react-icons/io5";
 import Link from "next/link";
 import { FiEdit3 } from "react-icons/fi";
+import { useActionState, useEffect } from "react";
 
 export function CreateTodoTask() {
   return (
@@ -26,15 +28,57 @@ export function UpdateInvoiceTodo({ id }: { id: string }) {
   );
 }
 
-export function DeleteTodo({ title }: { title: string }) {
-  const deleteTodoWithId = deleteTodoTask.bind(null, title);
+// export function DeleteTodo({ title }: { title: string }) {
+//   const deleteTodoWithId = deleteTodoTask.bind(null, title);
+//   return (
+//     <form className="flex items-center" action={deleteTodoWithId}>
+//       <button
+//         className="p-1 border-gray-500 border-2 rounded hover:border-red-700 ml-1 cursor-pointer active:bg-red-700 transition-colors duration-150 ease-out"
+//         type="submit"
+//       >
+//         <IoTrashOutline className="w-5 h-5  hover:text-red-700" />
+//       </button>
+//     </form>
+//   );
+// }
+export function DeleteTodo({
+  id,
+  onOptimisticDelete,
+  onRevert,
+}: {
+  id: string;
+  onOptimisticDelete?: () => void;
+  onRevert?: () => void;
+}) {
+  const [state, formAction] = useActionState<DeleteState, FormData>(
+    deleteTodoTask,
+    { ok: true }
+  );
+
+  useEffect(() => {
+    // если сервер вернул ошибку — откатываем локальный список
+    if (state && state.ok === false && state.id === id) {
+      onRevert?.();
+    }
+  }, [state, id, onRevert]);
+
   return (
-    <form className="flex items-center" action={deleteTodoWithId}>
+    <form
+      className="flex items-center"
+      action={formAction}
+      onSubmit={() => {
+        // оптимистично удаляем в родительском списке
+        onOptimisticDelete?.();
+      }}
+    >
+      <input type="hidden" name="id" value={id} />
       <button
         className="p-1 border-gray-500 border-2 rounded hover:border-red-700 ml-1 cursor-pointer active:bg-red-700 transition-colors duration-150 ease-out"
         type="submit"
+        aria-label="Удалить"
+        title="Удалить"
       >
-        <IoTrashOutline className="w-5 h-5  hover:text-red-700" />
+        <IoTrashOutline className="w-5 h-5 hover:text-red-700" />
       </button>
     </form>
   );

@@ -72,6 +72,9 @@ export default function TableTodoShop({ todos }: Props) {
   // хранить снимок для отката
   const snapshotRef = useRef<Todo[] | null>(null);
 
+  // отдельный снимок для отката удаления (не мешаем DnD-снапшоту)
+  const deleteSnapshotRef = useRef<Todo[] | null>(null);
+
   // подсветка последней задачи
   const prevIdsRef = useRef<Set<string>>(new Set(todos.map((t) => t.id)));
   const lastCreatedIdRef = useRef<string | null>(null);
@@ -129,7 +132,7 @@ export default function TableTodoShop({ todos }: Props) {
 
     // Ждём кадр после коммита и пробуем
     requestAnimationFrame(tryScroll);
-  }, [list.length]); // можно [list.length], если порядок часто меняется
+  }, [list.length]);
 
   // DnD state
   // Идентификатор текущей перетаскиваемой задачи.
@@ -431,6 +434,18 @@ export default function TableTodoShop({ todos }: Props) {
     }
   }
 
+  // оптимистическое удаление
+  function handleDeleteOptimistic(id: string) {
+    deleteSnapshotRef.current = list;
+    setList((prev) => prev.filter((t) => t.id !== id));
+  }
+  function revertDelete() {
+    if (deleteSnapshotRef.current) {
+      setList(deleteSnapshotRef.current);
+      deleteSnapshotRef.current = null;
+    }
+  }
+
   return (
     <div className="flow-root">
       <div className="min-w-full text-gray-900">
@@ -485,7 +500,12 @@ export default function TableTodoShop({ todos }: Props) {
                     onToggle={(next) => handleToggleOptimistic(todo.id, next)}
                   />
                   <UpdateInvoiceTodo id={todo.id} />
-                  <DeleteTodo title={todo.title} />
+                  {/* <DeleteTodo title={todo.title} /> */}
+                  <DeleteTodo
+                    id={todo.id}
+                    onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
+                    onRevert={revertDelete}
+                  />
                 </div>
               </div>
             );
@@ -521,7 +541,7 @@ export default function TableTodoShop({ todos }: Props) {
               {/* Некликабельно из-за pointer-events: none на враппере */}
 
               <UpdateInvoiceTodo id={draggingTodo.id} />
-              <DeleteTodo title={draggingTodo.title} />
+              {/* <DeleteTodo title={draggingTodo.title} /> */}
             </div>
           </div>
         </div>
