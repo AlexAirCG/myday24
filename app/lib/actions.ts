@@ -10,6 +10,10 @@ const FormSchema = z.object({
   id: z.string(),
   title: z.string(),
 });
+// + схема для удаления по id
+const DeleteSchema = z.object({
+  id: z.uuid(),
+});
 
 export async function createTodoFetch(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
@@ -24,23 +28,6 @@ export async function createTodoFetch(formData: FormData) {
 
   revalidatePath("/dashboard/todo");
 }
-
-// export async function reorderTodos(ids: string[]) {
-//   if (!ids?.length) return;
-
-//   await sql`
-//     WITH data AS (
-//       SELECT id, ord::int AS pos
-//       FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS u(id, ord)
-//     )
-//     UPDATE todo_myday AS t
-//     SET sort_order = d.pos
-//     FROM data d
-//     WHERE t.id = d.id
-//   `;
-
-//   revalidatePath("/dashboard/todo");
-// }
 
 // Изменение задачи
 export async function updateTodo(id: string, formData: FormData) {
@@ -58,11 +45,33 @@ export async function updateTodo(id: string, formData: FormData) {
   revalidatePath("/dashboard/todo");
   redirect("/dashboard/todo");
 }
-// Удаление задачи
-export async function deleteTodoTask(title: string) {
-  await sql`DELETE FROM todo_myday WHERE title = ${title}`;
-  revalidatePath("/dashboard/todo");
+
+// ВАЖНО: теперь удаляем по id и возвращаем состояние для useFormState
+export type DeleteState = { ok: boolean; id?: string; error?: string };
+export async function deleteTodoTask(
+  _prevState: DeleteState,
+  formData: FormData
+): Promise<DeleteState> {
+  const id = String(formData.get("id") ?? "");
+  const parsed = DeleteSchema.safeParse({ id });
+
+  if (!parsed.success) {
+    return { ok: false, id, error: "Неверный id" };
+  }
+
+  try {
+    await sql`DELETE FROM todo_myday WHERE id = ${id}`;
+    revalidatePath("/dashboard/todo");
+    return { ok: true, id };
+  } catch (e) {
+    return { ok: false, id, error: "Ошибка удаления" };
+  }
 }
+// Удаление задачи
+// export async function deleteTodoTask(title: string) {
+//   await sql`DELETE FROM todo_myday WHERE title = ${title}`;
+//   revalidatePath("/dashboard/todo");
+// }
 
 // Зделанные задачи
 export async function toggleTodo(id: string) {
