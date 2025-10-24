@@ -18,6 +18,9 @@ export default async function Page() {
         className="flex-1 min-h-0 overflow-y-auto md:p-2 overscroll-contain"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
+        <div className="mt-4 flex items-center justify-between gap-2 md:mt-8">
+          {/* <Search placeholder="Search city..." /> */}
+        </div>
         <TableTodoShop todos={todos} />
       </div>
     </div>

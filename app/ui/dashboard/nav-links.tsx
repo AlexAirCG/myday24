@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { FaShopify } from "react-icons/fa6";
 import { LuListTodo } from "react-icons/lu";
 import { IoCalendarNumberOutline } from "react-icons/io5";
+import { CiMemoPad } from "react-icons/ci";
 
 // Карта ссылок для отображения в боковой навигации.
 
@@ -34,7 +35,7 @@ export default function NavLinks() {
         )}
         href={"/dashboard/todo"}
       >
-        <LuListTodo className="w-6 h-6" />
+        <CiMemoPad className="w-6 h-6" />
         Дела
       </Link>
       <Link
