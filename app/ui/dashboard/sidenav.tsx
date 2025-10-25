@@ -4,6 +4,7 @@ import NavLinks from "./nav-links";
 import { FaPowerOff } from "react-icons/fa6";
 import { IoPowerSharp } from "react-icons/io5";
 import { signOut } from "@/auth";
+import { Button } from "../button";
 
 export default function SideNav() {
   return (
@@ -21,9 +22,9 @@ export default function SideNav() {
           }}
           className="md:hidden"
         >
-          <button className="rounded-md bg-gradient-to-br from-blue-200 to-blue-600 shadow-[0_4px_8px_rgba(0,0,0,0.5)] p-1 mr-2 hover:bg-gradient-to-bl hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3 cursor-pointer active:bg-green-700">
+          <Button className="py-1 px-2">
             <IoPowerSharp className="w-6 h-6 text-amber-50 " />
-          </button>
+          </Button>
         </form>
       </div>
       <div className="flex grow flex-row justify-between space-x-2 md:flex-col md:space-x-0 md:space-y-2">

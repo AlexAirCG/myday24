@@ -20,9 +20,9 @@ export default function LoginForm() {
   );
   return (
     <form action={formAction} className="space-y-3">
-      <div className="flex-1 rounded-lg bg-gray-50 px-6 pb-4 pt-8">
+      <div className="flex-1 rounded-lg bg-gray-200 px-6 pb-4 pt-8">
         <h1 className={`${lusitana.className} mb-3 text-2xl`}>
-          Please log in to continue.
+          Войдите, чтобы продолжить
         </h1>
         <div className="w-full">
           <div>
@@ -66,8 +66,11 @@ export default function LoginForm() {
           </div>
         </div>
         <input type="hidden" name="redirectTo" value={callbackUrl} />
-        <Button className="mt-4 w-full" aria-disabled={isPending}>
-          Log in <ArrowRightIcon className="ml-auto h-5 w-5 text-gray-50" />
+        <Button
+          className="h-10 px-4 mt-4 w-full text-shadow-lg/40 5 5"
+          aria-disabled={isPending}
+        >
+          Войти <ArrowRightIcon className="ml-auto h-5 w-5 text-gray-50" />
         </Button>
         <div
           aria-live="polite"
