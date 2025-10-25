@@ -28,19 +28,6 @@ export function UpdateInvoiceTodo({ id }: { id: string }) {
   );
 }
 
-// export function DeleteTodo({ title }: { title: string }) {
-//   const deleteTodoWithId = deleteTodoTask.bind(null, title);
-//   return (
-//     <form className="flex items-center" action={deleteTodoWithId}>
-//       <button
-//         className="p-1 border-gray-500 border-2 rounded hover:border-red-700 ml-1 cursor-pointer active:bg-red-700 transition-colors duration-150 ease-out"
-//         type="submit"
-//       >
-//         <IoTrashOutline className="w-5 h-5  hover:text-red-700" />
-//       </button>
-//     </form>
-//   );
-// }
 export function DeleteTodo({
   id,
   onOptimisticDelete,
