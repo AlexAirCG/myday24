@@ -6,7 +6,7 @@ type Props = {
   onToggle?: (next: boolean) => void;
 };
 
-export function CheckboxTodo({ id, completed, onToggle }: Props) {
+export function CheckboxTodo({ completed, onToggle }: Props) {
   return (
     <button
       type="button"
