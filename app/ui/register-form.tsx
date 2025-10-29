@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowRightIcon } from "@heroicons/react/20/solid";
 import {
@@ -8,6 +8,8 @@ import {
   KeyIcon,
   UserIcon,
   ExclamationCircleIcon,
+  EyeIcon,
+  EyeSlashIcon,
 } from "@heroicons/react/24/outline";
 import { register, type RegisterState } from "@/app/lib/actions";
 import { Button } from "./button";
@@ -22,9 +24,11 @@ export default function RegisterForm() {
     FormData
   >(register, { ok: false });
 
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <form action={formAction} className="space-y-3">
-      <div className="flex-1 rounded-lg bg-gray-50 px-6 pb-4 pt-8">
+      <div className="flex-1 rounded-lg bg-gray-200 px-6 pb-4 pt-8">
         <h1 className={`${lusitana.className} mb-3 text-2xl`}>
           Создайте аккаунт
         </h1>
@@ -83,15 +87,27 @@ export default function RegisterForm() {
           </label>
           <div className="relative">
             <input
-              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
+              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 pr-10 text-sm outline-2 placeholder:text-gray-500"
               id="password"
+              type={showPassword ? "text" : "password"}
               name="password"
-              type="password"
               placeholder="Минимум 6 символов"
               required
               minLength={6}
             />
             <KeyIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 focus:outline-none"
+              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="h-[18px] w-[18px]" />
+              ) : (
+                <EyeIcon className="h-[18px] w-[18px]" />
+              )}
+            </button>
           </div>
           {state?.errors?.password && (
             <p className="mt-1 text-xs text-red-500">{state.errors.password}</p>
@@ -106,15 +122,27 @@ export default function RegisterForm() {
           </label>
           <div className="relative">
             <input
-              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
+              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 pr-10 text-sm outline-2 placeholder:text-gray-500"
               id="confirm"
               name="confirm"
-              type="password"
+              type={showPassword ? "text" : "password"}
               placeholder="Повторите пароль"
               required
               minLength={6}
             />
             <KeyIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 focus:outline-none"
+              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="h-[18px] w-[18px]" />
+              ) : (
+                <EyeIcon className="h-[18px] w-[18px]" />
+              )}
+            </button>
           </div>
           {state?.errors?.confirm && (
             <p className="mt-1 text-xs text-red-500">{state.errors.confirm}</p>
@@ -124,8 +152,11 @@ export default function RegisterForm() {
         {/* redirectTo, чтобы после регистрации попадать туда же, куда и после логина */}
         <input type="hidden" name="redirectTo" value={callbackUrl} />
 
-        <Button className="mt-4 w-full" aria-disabled={isPending}>
-          Зарегистрироваться{" "}
+        <Button
+          className="h-10 px-4 mt-4 w-full text-shadow-lg/40 5 5"
+          aria-disabled={isPending}
+        >
+          Зарегистрироваться
           <ArrowRightIcon className="ml-auto h-5 w-5 text-gray-50" />
         </Button>
 
