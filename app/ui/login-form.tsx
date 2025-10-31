@@ -12,6 +12,7 @@ import { Button } from "./button";
 import { useActionState, useState } from "react";
 import { authenticate } from "@/app/lib/actions";
 import { useSearchParams } from "next/navigation";
+import { signIn as signInClient } from "next-auth/react";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
@@ -88,6 +89,23 @@ export default function LoginForm() {
         >
           Войти <ArrowRightIcon className="ml-auto h-5 w-5 text-gray-50" />
         </Button>
+
+        {/* Разделитель */}
+        <div className="my-4 flex items-center">
+          <div className="h-px flex-1 bg-gray-300" />
+          <span className="px-3 text-xs text-gray-500">или</span>
+          <div className="h-px flex-1 bg-gray-300" />
+        </div>
+
+        {/* Кнопка Google */}
+        <button
+          type="button"
+          onClick={() => signInClient("google", { redirectTo: callbackUrl })}
+          className="h-10 w-full rounded-md bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 text-sm font-medium"
+        >
+          Войти с Google
+        </button>
+
         <div
           aria-live="polite"
           aria-atomic="true"
