@@ -6,6 +6,7 @@ import z from "zod";
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
 import bcrypt from "bcryptjs";
+import { auth } from "@/auth";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
@@ -17,66 +18,76 @@ const FormSchema = z.object({
 const DeleteSchema = z.object({
   id: z.uuid(),
 });
+export type DeleteState = { ok: boolean; id?: string; error?: string };
 
 export async function createTodoFetch(formData: FormData) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
   const title = String(formData.get("title") || "").trim();
   if (!title) return;
 
   await sql`
-    INSERT INTO todo_myday (id, title, completed, sort_order)
+    INSERT INTO todo_myday (id, title, completed, sort_order, user_id)
     VALUES (gen_random_uuid(), ${title}, false,
-      COALESCE((SELECT MAX(sort_order) + 1 FROM todo_myday), 1)
+      COALESCE((SELECT MAX(sort_order) + 1 FROM todo_myday WHERE user_id=${userId}), 1),
+      ${userId}
     )
   `;
 
   revalidatePath("/dashboard/todo");
 }
 
-// Изменение задачи
 export async function updateTodo(id: string, formData: FormData) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
   const { title } = FormSchema.parse({
     title: formData.get("title"),
-    id: formData.get("id") ?? "", // Использует пустую строку, если null
+    id: formData.get("id") ?? "",
   });
 
   await sql`
     UPDATE todo_myday
     SET title = ${title}
-    WHERE id = ${id}
+    WHERE id = ${id} AND user_id = ${userId}
   `;
 
   revalidatePath("/dashboard/todo");
   redirect("/dashboard/todo");
 }
 
-// ВАЖНО: теперь удаляем по id и возвращаем состояние для useFormState
-export type DeleteState = { ok: boolean; id?: string; error?: string };
-export async function deleteTodoTask(
-  _prevState: DeleteState,
-  formData: FormData
-): Promise<DeleteState> {
+export async function deleteTodoTask(_prev: DeleteState, formData: FormData) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { ok: false, error: "Unauthorized" };
+
   const id = String(formData.get("id") ?? "");
   const parsed = DeleteSchema.safeParse({ id });
-
   if (!parsed.success) {
     return { ok: false, id, error: "Неверный id" };
   }
 
   try {
-    await sql`DELETE FROM todo_myday WHERE id = ${id}`;
+    await sql`DELETE FROM todo_myday WHERE id = ${id} AND user_id = ${userId}`;
     revalidatePath("/dashboard/todo");
     return { ok: true, id };
-  } catch (e) {
+  } catch {
     return { ok: false, id, error: "Ошибка удаления" };
   }
 }
 
-// Зделанные задачи
 export async function toggleTodo(id: string) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
   await sql`
     UPDATE todo_myday
     SET completed = NOT completed
-    WHERE id = ${id}
+    WHERE id = ${id} AND user_id = ${userId}
   `;
   revalidatePath("/dashboard/todo");
 }
