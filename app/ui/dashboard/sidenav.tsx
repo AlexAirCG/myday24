@@ -4,7 +4,6 @@ import NavLinks from "./nav-links";
 import { FaPowerOff } from "react-icons/fa6";
 import { IoPowerSharp } from "react-icons/io5";
 import { signOut } from "@/auth";
-import { Button } from "../button";
 import { SubmitButton } from "../submit-button";
 
 export default function SideNav() {
@@ -23,9 +22,6 @@ export default function SideNav() {
           }}
           className="md:hidden"
         >
-          {/* <Button type="submit" className="py-1 px-2">
-            <IoPowerSharp className="w-6 h-6 text-amber-50 " />
-          </Button> */}
           <SubmitButton className="py-1 px-2">
             <IoPowerSharp className="w-6 h-6 text-amber-50" />
           </SubmitButton>
