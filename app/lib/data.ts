@@ -13,6 +13,7 @@ export async function fetchTodo() {
     const todos = sql<Todo[]>`
       SELECT id, title, completed
       FROM todo_myday
+      WHERE user_id = ${userId}
       ORDER BY sort_order ASC, id ASC
      `;
     return todos;
