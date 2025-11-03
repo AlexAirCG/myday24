@@ -6,7 +6,9 @@ import { IoPowerSharp } from "react-icons/io5";
 import { signOut } from "@/auth";
 import { SubmitButton } from "../submit-button";
 
-export default function SideNav() {
+type SideNavProps = { email?: string | null };
+
+export default function SideNav({ email }: SideNavProps) {
   return (
     <div className="flex flex-col p-2 md:h-full md:px-2">
       <div className="mb-2 flex  items-center justify-between rounded-md bg-blue-600 p-2 md:h-40 bg-gradient-to-br from-blue-200 to-blue-600">
@@ -15,6 +17,12 @@ export default function SideNav() {
             <AcmeLogo />
           </div>
         </Link>
+        <div
+          className="text-white text-sm md:text-base truncate max-w-[50%]"
+          title={email ?? ""}
+        >
+          {email ?? ""}
+        </div>
         <form
           action={async () => {
             "use server";

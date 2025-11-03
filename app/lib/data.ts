@@ -1,5 +1,5 @@
 import postgres from "postgres";
-import { Todo } from "./definitions";
+import { Todo, User } from "./definitions";
 import { auth } from "@/auth";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
@@ -10,7 +10,7 @@ export async function fetchTodo() {
   if (!userId) return [];
 
   try {
-    const todos = sql<Todo[]>`
+    const todos = await sql<Todo[]>`
       SELECT id, title, completed
       FROM todo_myday
       WHERE user_id = ${userId}
@@ -39,5 +39,43 @@ export async function fetchTodoById(id: string) {
   } catch (error) {
     console.error("Database Error:", error);
     throw new Error("Failed to fetch invoice.");
+  }
+}
+
+// export async function fetchUserEmail() {
+//   try {
+//     const data = await sql<User[]>`
+//       SELECT email
+//       FROM users
+//     `;
+
+//     return data;
+//   } catch (error) {
+//     console.error("Database Error:", error);
+//     throw new Error("Failed to fetch invoice.");
+//   }
+// }
+// ✅ Возвращаем email текущего пользователя (одну строку)
+export async function fetchUserEmail(): Promise<string | null> {
+  try {
+    const session = await auth();
+    // // Можно взять прямо из сессии, если она надежно содержит email:
+    // const sessionEmail = session?.user?.email ?? null;
+    // if (sessionEmail) return sessionEmail;
+
+    // Или запасной вариант — по id из БД:
+    const userId = session?.user?.id;
+    if (!userId) return null;
+
+    const rows = await sql<{ email: string }[]>`
+      SELECT email
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
+    return rows[0]?.email ?? null;
+  } catch (error) {
+    console.error("Database Error:", error);
+    return null;
   }
 }
