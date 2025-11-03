@@ -42,26 +42,13 @@ export async function fetchTodoById(id: string) {
   }
 }
 
-// export async function fetchUserEmail() {
-//   try {
-//     const data = await sql<User[]>`
-//       SELECT email
-//       FROM users
-//     `;
-
-//     return data;
-//   } catch (error) {
-//     console.error("Database Error:", error);
-//     throw new Error("Failed to fetch invoice.");
-//   }
-// }
 // ✅ Возвращаем email текущего пользователя (одну строку)
 export async function fetchUserEmail(): Promise<string | null> {
   try {
     const session = await auth();
     // // Можно взять прямо из сессии, если она надежно содержит email:
-    // const sessionEmail = session?.user?.email ?? null;
-    // if (sessionEmail) return sessionEmail;
+    const sessionEmail = session?.user?.email ?? null;
+    if (sessionEmail) return sessionEmail;
 
     // Или запасной вариант — по id из БД:
     const userId = session?.user?.id;
