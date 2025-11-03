@@ -11,14 +11,14 @@ type SideNavProps = { email?: string | null };
 export default function SideNav({ email }: SideNavProps) {
   return (
     <div className="flex flex-col p-2 md:h-full md:px-2">
-      <div className="mb-2 flex  items-center justify-between rounded-md bg-blue-600 p-2 md:h-40 bg-gradient-to-br from-blue-200 to-blue-600">
+      <div className="mb-2 flex md:flex-col items-center md:justify-center justify-between rounded-md bg-blue-600 p-2 md:h-40 bg-gradient-to-br from-blue-200 to-blue-600">
         <Link href="/dashboard">
-          <div className=" text-white ">
+          <div className=" text-white pr-2">
             <AcmeLogo />
           </div>
         </Link>
         <div
-          className="text-white text-sm md:text-base truncate max-w-[50%]"
+          className="text-white text-sm md:text-base truncate "
           title={email ?? ""}
         >
           {email ?? ""}
