@@ -10,19 +10,13 @@ import type { JWT } from "next-auth/jwt";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
-// async function getUser(email: string): Promise<User | undefined> {
-//   try {
-//     const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
-//     return user[0];
-//   } catch (error) {
-//     console.error("Failed to fetch user:", error);
-//     throw new Error("Failed to fetch user.");
-//   }
-// }
 async function getUser(rawEmail: string): Promise<User | undefined> {
   const email = rawEmail.toLowerCase();
   try {
-    const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
+    // const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
+    const user = await sql<User[]>`
+  SELECT * FROM users WHERE lower(email) = ${email}
+`;
     return user[0];
   } catch (error) {
     console.error("Failed to fetch user:", error);
@@ -65,28 +59,6 @@ export const {
     }),
   ],
 
-  // callbacks: {
-  //   async jwt({ token, user }) {
-  //     // при логине через Credentials user присутствует
-  //     if (user?.id) token.userId = user.id;
-
-  //     // при логине через Google user.id может не быть — достанем из БД по email
-  //     if (!token.userId && token.email) {
-  //       const dbUser = await getUser(token.email);
-  //       if (dbUser) token.userId = dbUser.id;
-  //     }
-  //     return token as JWT & { userId?: string };
-  //   },
-  //   async session({ session, token }) {
-  //     if (token?.userId) {
-  //       // ts-expect-error расширяем тип
-  //       session.user.id = token.userId as string;
-  //     }
-  //     return session;
-  //   },
-  //   // перетянем ваш authorized сюда (или оставьте в auth.config.ts)
-  //   ...authConfig.callbacks,
-  // },
   callbacks: {
     async jwt({ token, user, account }) {
       // если вход через credentials — id уже есть
@@ -134,23 +106,6 @@ export const {
     ...authConfig.callbacks,
   },
 
-  // events: {
-  //   async signIn({ user, account, profile }) {
-  //     if (account?.provider !== "google") return;
-  //     const email = user?.email;
-  //     const name = user?.name || (profile as any)?.name || "GoogleUser";
-  //     if (!email) return;
-  //     try {
-  //       await sql`
-  //         INSERT INTO users (name, email, password)
-  //         VALUES (${name}, ${email}, ${null})
-  //         ON CONFLICT (email) DO NOTHING
-  //       `;
-  //     } catch (e) {
-  //       console.error("Upsert Google user failed:", e);
-  //     }
-  //   },
-  // },
   events: {
     async signIn({ user, account, profile }) {
       if (account?.provider !== "google") return;
@@ -170,3 +125,54 @@ export const {
     },
   },
 });
+
+// async function getUser(email: string): Promise<User | undefined> {
+//   try {
+//     const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
+//     return user[0];
+//   } catch (error) {
+//     console.error("Failed to fetch user:", error);
+//     throw new Error("Failed to fetch user.");
+//   }
+// }
+
+// callbacks: {
+//   async jwt({ token, user }) {
+//     // при логине через Credentials user присутствует
+//     if (user?.id) token.userId = user.id;
+
+//     // при логине через Google user.id может не быть — достанем из БД по email
+//     if (!token.userId && token.email) {
+//       const dbUser = await getUser(token.email);
+//       if (dbUser) token.userId = dbUser.id;
+//     }
+//     return token as JWT & { userId?: string };
+//   },
+//   async session({ session, token }) {
+//     if (token?.userId) {
+//       // ts-expect-error расширяем тип
+//       session.user.id = token.userId as string;
+//     }
+//     return session;
+//   },
+//   // перетянем ваш authorized сюда (или оставьте в auth.config.ts)
+//   ...authConfig.callbacks,
+// },
+
+// events: {
+//   async signIn({ user, account, profile }) {
+//     if (account?.provider !== "google") return;
+//     const email = user?.email;
+//     const name = user?.name || (profile as any)?.name || "GoogleUser";
+//     if (!email) return;
+//     try {
+//       await sql`
+//         INSERT INTO users (name, email, password)
+//         VALUES (${name}, ${email}, ${null})
+//         ON CONFLICT (email) DO NOTHING
+//       `;
+//     } catch (e) {
+//       console.error("Upsert Google user failed:", e);
+//     }
+//   },
+// },
