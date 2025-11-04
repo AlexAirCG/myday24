@@ -6,15 +6,23 @@ import { z } from "zod";
 import type { User } from "@/app/lib/definitions";
 import bcrypt from "bcryptjs";
 import postgres from "postgres";
+import type { JWT } from "next-auth/jwt";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
+// async function getUser(email: string): Promise<User | undefined> {
+//   try {
+//     const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
+//     return user[0];
+//   } catch (error) {
+//     console.error("Failed to fetch user:", error);
+//     throw new Error("Failed to fetch user.");
+//   }
+// }
 async function getUser(rawEmail: string): Promise<User | undefined> {
   const email = rawEmail.toLowerCase();
   try {
-    const user = await sql<User[]>`
-  SELECT * FROM users WHERE lower(email) = ${email}
-`;
+    const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
     return user[0];
   } catch (error) {
     console.error("Failed to fetch user:", error);
@@ -57,54 +65,92 @@ export const {
     }),
   ],
 
+  // callbacks: {
+  //   async jwt({ token, user }) {
+  //     // при логине через Credentials user присутствует
+  //     if (user?.id) token.userId = user.id;
+
+  //     // при логине через Google user.id может не быть — достанем из БД по email
+  //     if (!token.userId && token.email) {
+  //       const dbUser = await getUser(token.email);
+  //       if (dbUser) token.userId = dbUser.id;
+  //     }
+  //     return token as JWT & { userId?: string };
+  //   },
+  //   async session({ session, token }) {
+  //     if (token?.userId) {
+  //       // ts-expect-error расширяем тип
+  //       session.user.id = token.userId as string;
+  //     }
+  //     return session;
+  //   },
+  //   // перетянем ваш authorized сюда (или оставьте в auth.config.ts)
+  //   ...authConfig.callbacks,
+  // },
   callbacks: {
     async jwt({ token, user, account }) {
-      // Если уже есть наш DB id — выходим
-      if ((token as any).userId) return token;
-
-      // Credentials: authorize() уже вернул id из БД
-      if (account?.provider === "credentials" && user?.id) {
+      // если вход через credentials — id уже есть
+      if (user?.id) {
         (token as any).userId = user.id;
         return token;
       }
 
-      // OAuth: берём email, находим/создаём пользователя в БД и сохраняем его id
-      const email = (user?.email ?? token.email)?.toLowerCase();
-      if (!email) return token;
+      // для Google (или любого OAuth)
+      if (!(token as any).userId && token.email) {
+        const email = token.email.toLowerCase();
 
-      const name = user?.name ?? token.name ?? "User";
+        // пытаемся создать, если нет (атомарно)
+        const rows = await sql<{ id: string }[]>`
+        INSERT INTO users (name, email, password)
+        VALUES (${token.name || "User"}, ${email}, ${null})
+        ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+        RETURNING id
+      `;
 
-      const rows = await sql<{ id: string }[]>`
-      INSERT INTO users (name, email, password)
-      VALUES (${name}, ${email}, ${null})
-      ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id
-    `;
+        const userId =
+          rows[0]?.id ??
+          (await (async () => {
+            const r = await sql<{ id: string }[]>`
+            SELECT id FROM users WHERE email=${email} LIMIT 1
+          `;
+            return r[0]?.id;
+          })());
 
-      const userId =
-        rows[0]?.id ??
-        (await (async () => {
-          const r = await sql<{ id: string }[]>`
-          SELECT id FROM users WHERE lower(email) = ${email} LIMIT 1
-        `;
-          return r[0]?.id;
-        })());
+        if (userId) (token as any).userId = userId;
+      }
 
-      if (userId) (token as any).userId = userId;
       return token;
     },
 
     async session({ session, token }) {
       if ((token as any).userId) {
-        // ts-expect-error расширяем session.user
+        // ts-expect-error расширение поля
         session.user.id = (token as any).userId as string;
       }
       return session;
     },
 
-    // оставить ваш authorized
+    // важно оставить ваш authorized:
     ...authConfig.callbacks,
   },
+
+  // events: {
+  //   async signIn({ user, account, profile }) {
+  //     if (account?.provider !== "google") return;
+  //     const email = user?.email;
+  //     const name = user?.name || (profile as any)?.name || "GoogleUser";
+  //     if (!email) return;
+  //     try {
+  //       await sql`
+  //         INSERT INTO users (name, email, password)
+  //         VALUES (${name}, ${email}, ${null})
+  //         ON CONFLICT (email) DO NOTHING
+  //       `;
+  //     } catch (e) {
+  //       console.error("Upsert Google user failed:", e);
+  //     }
+  //   },
+  // },
   events: {
     async signIn({ user, account, profile }) {
       if (account?.provider !== "google") return;
