@@ -105,4 +105,22 @@ export const {
     // оставить ваш authorized
     ...authConfig.callbacks,
   },
+  events: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider !== "google") return;
+      const rawEmail = user?.email;
+      if (!rawEmail) return;
+      const email = rawEmail.toLowerCase();
+      const name = user?.name || (profile as any)?.name || "GoogleUser";
+      try {
+        await sql`
+        INSERT INTO users (name, email, password)
+        VALUES (${name}, ${email}, ${null})
+        ON CONFLICT (email) DO NOTHING
+      `;
+      } catch (e) {
+        console.error("Upsert Google user failed:", e);
+      }
+    },
+  },
 });
