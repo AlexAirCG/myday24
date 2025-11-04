@@ -138,7 +138,8 @@ export async function register(
 ): Promise<RegisterState> {
   const parsed = RegisterSchema.safeParse({
     name: formData.get("name"),
-    email: formData.get("email"),
+    // email: formData.get("email"),
+    email: String(formData.get("email") ?? "").toLowerCase(),
     password: formData.get("password"),
     confirm: formData.get("confirm"),
     redirectTo: formData.get("redirectTo") || "/dashboard",
