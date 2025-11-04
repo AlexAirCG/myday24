@@ -100,8 +100,7 @@ export default function LoginForm() {
         {/* Кнопка Google */}
         <button
           type="button"
-          // onClick={() => signInClient("google", { redirectTo: callbackUrl })}
-          onClick={() => signInClient("google", { callbackUrl: callbackUrl })}
+          onClick={() => signInClient("google", { redirectTo: callbackUrl })}
           className="h-10 w-full rounded-md bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 text-sm font-medium"
         >
           Войти с Google
