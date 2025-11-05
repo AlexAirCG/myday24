@@ -54,43 +54,72 @@ export const {
   ],
 
   callbacks: {
-    async jwt({ token, user }) {
-      // при логине через Credentials user присутствует
-      if (user?.id) token.userId = user.id;
+    // ✅ 1. Сначала создаем/проверяем пользователя в БД
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google") {
+        const email = user?.email;
+        const name = user?.name || (profile as any)?.name || "GoogleUser";
 
-      // при логине через Google user.id может не быть — достанем из БД по email
+        if (!email) {
+          console.error("Google sign-in: No email provided");
+          return false;
+        }
+
+        try {
+          // Создаем пользователя, если его нет
+          await sql`
+            INSERT INTO users (name, email, password)
+            VALUES (${name}, ${email}, ${null})
+            ON CONFLICT (email) DO NOTHING
+          `;
+          console.log("✅ Google user ensured in DB:", email);
+        } catch (e) {
+          console.error("❌ Failed to create Google user:", e);
+          return false;
+        }
+      }
+      return true;
+    },
+
+    // ✅ 2. Теперь получаем userId (пользователь точно есть в БД)
+    async jwt({ token, user, account }) {
+      // При первом входе через Credentials
+      if (user?.id) {
+        token.userId = user.id;
+        console.log("✅ JWT: userId from Credentials:", user.id);
+      }
+
+      // При первом входе через Google или при обновлении токена
       if (!token.userId && token.email) {
         const dbUser = await getUser(token.email);
-        if (dbUser) token.userId = dbUser.id;
+        if (dbUser) {
+          token.userId = dbUser.id;
+          console.log(
+            "✅ JWT: userId from DB:",
+            dbUser.id,
+            "for email:",
+            token.email
+          );
+        } else {
+          console.error("❌ JWT: No user found in DB for email:", token.email);
+        }
       }
+
       return token as JWT & { userId?: string };
     },
+
+    // ✅ 3. Передаем userId в сессию
     async session({ session, token }) {
       if (token?.userId) {
         // ts-expect-error расширяем тип
         session.user.id = token.userId as string;
+        console.log("✅ Session: userId set:", token.userId);
+      } else {
+        console.error("❌ Session: No userId in token!");
       }
       return session;
     },
-    // перетянем ваш authorized сюда (или оставьте в auth.config.ts)
-    ...authConfig.callbacks,
-  },
 
-  events: {
-    async signIn({ user, account, profile }) {
-      if (account?.provider !== "google") return;
-      const email = user?.email;
-      const name = user?.name || (profile as any)?.name || "GoogleUser";
-      if (!email) return;
-      try {
-        await sql`
-          INSERT INTO users (name, email, password)
-          VALUES (${name}, ${email}, ${null})
-          ON CONFLICT (email) DO NOTHING
-        `;
-      } catch (e) {
-        console.error("Upsert Google user failed:", e);
-      }
-    },
+    ...authConfig.callbacks,
   },
 });
