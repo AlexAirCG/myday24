@@ -62,7 +62,7 @@ export const {
   ],
 
   callbacks: {
-    // ✅ 1. Сначала создаем/проверяем пользователя в БД
+    // создаем/проверяем пользователя в БД
     async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
         const email = user?.email;
@@ -80,50 +80,46 @@ export const {
             VALUES (${name}, ${email}, ${null})
             ON CONFLICT (email) DO NOTHING
           `;
-          console.log("✅ Google user ensured in DB:", email);
+          console.log("Google user ensured in DB:", email);
         } catch (e) {
-          console.error("❌ Failed to create Google user:", e);
+          console.error("Failed to create Google user:", e);
           return false;
         }
       }
       return true;
     },
 
-    // ✅ 2. Теперь получаем userId (пользователь точно есть в БД)
     async jwt({ token, user, account }) {
-      // При первом входе через Credentials
-      if (user?.id) {
+      // Для Credentials берем id напрямую (это уже наш DB id)
+      if (user?.id && account?.provider === "credentials") {
         token.userId = user.id;
-        console.log("✅ JWT: userId from Credentials:", user.id);
+        console.log("JWT: userId from Credentials:", user.id);
       }
-
-      // При первом входе через Google или при обновлении токена
-      if (!token.userId && token.email) {
+      // Для Google (или при обновлении токена) - ВСЕГДА получаем из БД
+      else if (
+        token.email &&
+        (!token.userId || account?.provider === "google")
+      ) {
         const dbUser = await getUser(token.email);
         if (dbUser) {
           token.userId = dbUser.id;
-          console.log(
-            "✅ JWT: userId from DB:",
-            dbUser.id,
-            "for email:",
-            token.email
-          );
+          console.log("JWT: userId from DB:", dbUser.id, "for", token.email);
         } else {
-          console.error("❌ JWT: No user found in DB for email:", token.email);
+          console.error("JWT: No user in DB for:", token.email);
         }
       }
 
       return token as JWT & { userId?: string };
     },
 
-    // ✅ 3. Передаем userId в сессию
+    // Передаем userId в сессию
     async session({ session, token }) {
       if (token?.userId) {
         // ts-expect-error расширяем тип
         session.user.id = token.userId as string;
-        console.log("✅ Session: userId set:", token.userId);
+        console.log("Session: userId set:", token.userId);
       } else {
-        console.error("❌ Session: No userId in token!");
+        console.error("Session: No userId in token!");
       }
       return session;
     },

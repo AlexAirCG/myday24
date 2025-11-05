@@ -23,6 +23,9 @@ export type DeleteState = { ok: boolean; id?: string; error?: string };
 export async function createTodoFetch(formData: FormData) {
   const session = await auth();
   const userId = session?.user?.id;
+
+  console.log("Creating todo for userId:", userId);
+
   if (!userId) throw new Error("Unauthorized");
 
   const title = String(formData.get("title") || "").trim();
