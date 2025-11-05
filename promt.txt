@@ -1,0 +1,1756 @@
+// fiels ============================================================================================	      
+app
+app/api
+app/api/auth/[...nextauth]/route.ts
+app/api/todos/reorder/route.ts
+app/dashboard/shop/page.tsx
+app/dashboard/todo/[id]/edit/page.tsx
+app/dashboard/todo/page.tsx
+app/dashboard/layout.tsx
+app/dashboard/page.tsx
+app/lib/actions.ts
+app/lib/data.ts
+app/lib/definitions.ts
+app/login/page.tsx
+app/register/page.tsx
+app/ui/dashboard/nav-links.tsx
+app/ui/dashboard/sidenav.tsx
+app/ui/shop/table-todo-shop.tsx
+app/ui/todo/breadcrumbs.tsx
+app/ui/todo/buttons.tsx
+app/ui/todo/checkbox-todo.tsx
+app/ui/todo/create-todo.tsx
+app/ui/todo/edit-todo-input.tsx
+app/ui/todo/edit-todo.tsx
+app/ui/acme-logo.tsx
+app/ui/button.tsx
+app/ui/fonts.ts
+app/ui/global.css
+app/ui/login-form.tsx
+app/ui/register-form.tsx
+app/ui/shop.module.css
+app/ui/submit-button.tsx
+app/layout.tsx
+app/page.tsx
+auth.config.ts
+auth.ts
+// postgreSQL ============================================================================================
+// users =========
+id	 uuid [uuid_generate_v4()]	
+name	 character varying(255)	
+email	 text	
+password text NULL	
+Индексы
+UNIQUE	email
+PRIMARY	id
+// todo_myday ==========
+id	    uuid [uuid_generate_v4()]	
+title	    text	
+completed   boolean NULL [false]	
+sort_order  integer NULL	
+user_id	    uuid
+Индексы
+PRIMARY	id
+INDEX	sort_order, id
+INDEX	user_id
+UNIQUE	user_id, sort_order
+// app/api/auth/[...nextauth]/route.ts ====================================================================
+export { GET, POST } from "@/auth";
+// app/api/todos/reorder/route.ts =========================================================================
+import { revalidatePath } from "next/cache";
+import { NextResponse } from "next/server";
+import postgres from "postgres";
+import { auth } from "@/auth";
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
+export async function POST(req: Request) {
+  try {
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId)
+      return NextResponse.json(
+        { ok: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    const { ids } = (await req.json()) as { ids?: string[] };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "ids must be a non-empty array" },
+        { status: 400 }
+      );
+    }
+    // Обновляем только те id, которые принадлежат текущему пользователю
+    await sql`
+      WITH data AS (
+        SELECT id::uuid, ord::int AS pos
+        FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS u(id, ord)
+      )
+      UPDATE todo_myday AS t
+      SET sort_order = d.pos
+      FROM data d
+      WHERE t.id = d.id AND t.user_id = ${userId}
+    `;
+    // Инвалидируем нужную страницу/сегмент
+    revalidatePath("/dashboard/todo");
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("reorder error", err);
+    return NextResponse.json(
+      { ok: false, error: "Internal Server Error" },
+      { status: 500 }
+    );
+  }
+}
+// app/dashboard/todo/[id]/edit/page.tsx ==================================================================
+import { fetchTodoById } from "@/app/lib/data";
+import Breadcrumbs from "@/app/ui/todo/breadcrumbs";
+import EditTodo from "@/app/ui/todo/edit-todo";
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const id = params.id;
+  const [title] = await Promise.all([fetchTodoById(id)]);
+  return (
+    <main>
+      <Breadcrumbs
+        breadcrumbs={[
+          { label: "Дела", href: "/dashboard/todo" },
+          {
+            label: "Редактировать покупку",
+            href: `/dashboard/todo/${id}/edit`,
+            active: true,
+          },
+        ]}
+      />
+      <EditTodo title={title} />
+    </main>
+  );
+}
+// app/dashboard/todo/page.tsx ========================================================================
+import { fetchTodo } from "@/app/lib/data";
+import { inter } from "@/app/ui/fonts";
+import TableTodoShop from "@/app/ui/shop/table-todo-shop";
+import CreateTodo from "@/app/ui/todo/create-todo";
+export default async function Page() {
+  const todos = await fetchTodo();
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Фиксированная шапка (не прокручивается) */}
+      <div className="sticky top-0 z-10 flex flex-col w-full bg-sky-200 md:p-2">
+        <h1 className={`${inter.className} text-2xl md:mb-6`}>Дела</h1>
+        <CreateTodo />
+      </div>
+      {/* Прокручиваемая часть только для списка */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto md:p-2 overscroll-contain"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        <div className="mt-4 flex items-center justify-between gap-2 md:mt-8">
+          {/* <Search placeholder="Search city..." /> */}
+        </div>
+        <TableTodoShop todos={todos} />
+      </div>
+    </div>
+  );
+}
+// app/dashboard/layout.tsx ============================================================================
+import SideNav from "../ui/dashboard/sidenav";
+import { fetchUserEmail } from "../lib/data";
+import SideNav from "../ui/dashboard/sidenav";
+export default async function Layout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const email = await fetchUserEmail(); // string | null
+  return (
+    <div className="flex h-[100svh] flex-col md:flex-row overflow-hidden">
+      <div className="flex-none w-full md:w-64">
+        {/* ✅ Передаем строку/nullable */}
+        <SideNav email={email} />
+      </div>
+      <div className="flex-1 min-h-0 bg-sky-200 p-3 md:p-12 overflow-hidden">
+        {children}
+      </div>
+    </div>
+  );
+}
+// app/dashboard/page.tsx ===========================================================================
+"use client";
+import { useState } from "react";
+import { CiBatteryEmpty, CiBatteryFull } from "react-icons/ci";
+import { TbAccessPoint } from "react-icons/tb";
+import { TbAccessPointOff } from "react-icons/tb";
+export default function Page() {
+  const [showPass, setShowPass] = useState(true);
+  const [showPower, setShowPower] = useState(true);
+  return (
+    <div>
+      <button type="button" onClick={() => setShowPass(!showPass)}>
+        {showPass ? (
+          <TbAccessPoint className="w-10 h-10" />
+        ) : (
+          <TbAccessPointOff className="w-10 h-10" />
+        )}
+      </button>
+      <button type="button" onClick={() => setShowPower(!showPower)}>
+        {showPower ? (
+          <CiBatteryEmpty className="w-10 h-10" />
+        ) : (
+          <CiBatteryFull className="w-10 h-10" />
+        )}
+      </button>
+    </div>
+  );
+}
+// app/lib/actions.ts ==================================================================================
+"use server";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import postgres from "postgres";
+import z from "zod";
+import { signIn } from "@/auth";
+import { AuthError } from "next-auth";
+import bcrypt from "bcryptjs";
+import { auth } from "@/auth";
+
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
+
+const FormSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+});
+// + схема для удаления по id
+const DeleteSchema = z.object({
+  id: z.uuid(),
+});
+export type DeleteState = { ok: boolean; id?: string; error?: string };
+
+export async function createTodoFetch(formData: FormData) {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  console.log("Creating todo for userId:", userId);
+
+  if (!userId) throw new Error("Unauthorized");
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) return;
+
+  await sql`
+    INSERT INTO todo_myday (id, title, completed, sort_order, user_id)
+    VALUES (gen_random_uuid(), ${title}, false,
+      COALESCE((SELECT MAX(sort_order) + 1 FROM todo_myday WHERE user_id=${userId}), 1),
+      ${userId}
+    )
+  `;
+
+  revalidatePath("/dashboard/todo");
+}
+
+export async function updateTodo(id: string, formData: FormData) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  const { title } = FormSchema.parse({
+    title: formData.get("title"),
+    id: formData.get("id") ?? "",
+  });
+
+  await sql`
+    UPDATE todo_myday
+    SET title = ${title}
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+
+  revalidatePath("/dashboard/todo");
+  redirect("/dashboard/todo");
+}
+
+export async function deleteTodoTask(_prev: DeleteState, formData: FormData) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { ok: false, error: "Unauthorized" };
+
+  const id = String(formData.get("id") ?? "");
+  const parsed = DeleteSchema.safeParse({ id });
+  if (!parsed.success) {
+    return { ok: false, id, error: "Неверный id" };
+  }
+
+  try {
+    await sql`DELETE FROM todo_myday WHERE id = ${id} AND user_id = ${userId}`;
+    revalidatePath("/dashboard/todo");
+    return { ok: true, id };
+  } catch {
+    return { ok: false, id, error: "Ошибка удаления" };
+  }
+}
+
+export async function toggleTodo(id: string) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  await sql`
+    UPDATE todo_myday
+    SET completed = NOT completed
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+  revalidatePath("/dashboard/todo");
+}
+
+export async function authenticate(
+  prevState: string | undefined,
+  formData: FormData
+) {
+  try {
+    await signIn("credentials", formData);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "CredentialsSignin":
+          return "Неверный логин или пароль.";
+        default:
+          return "Что то пошло не так.";
+      }
+    }
+    throw error;
+  }
+}
+
+// регистрация пользователя
+// Состояние для useActionState
+export type RegisterState = {
+  ok: boolean;
+  message?: string;
+  errors?: Partial<Record<"name" | "email" | "password" | "confirm", string>>;
+};
+
+const RegisterSchema = z
+  .object({
+    name: z.string().min(1, "Введите имя"),
+    email: z.email("Некорректный email"),
+    password: z.string().min(6, "Минимум 6 символов"),
+    confirm: z.string().min(6),
+    redirectTo: z.string().optional(),
+  })
+  .refine((v) => v.password === v.confirm, {
+    path: ["confirm"],
+    message: "Пароли не совпадают",
+  });
+
+export async function register(
+  _prev: RegisterState | undefined,
+  formData: FormData
+): Promise<RegisterState> {
+  const parsed = RegisterSchema.safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+    password: formData.get("password"),
+    confirm: formData.get("confirm"),
+    redirectTo: formData.get("redirectTo") || "/dashboard",
+  });
+
+  if (!parsed.success) {
+    const fieldErrors: RegisterState["errors"] = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path[0] as keyof NonNullable<RegisterState["errors"]>;
+      fieldErrors[key] = issue.message;
+    }
+    return { ok: false, errors: fieldErrors };
+  }
+
+  const { name, email, password, redirectTo } = parsed.data;
+
+  // Проверка существования email
+  const exists = await sql<{ exists: boolean }[]>`
+    SELECT EXISTS(SELECT 1 FROM users WHERE email=${email}) as exists
+  `;
+  if (exists[0]?.exists) {
+    return {
+      ok: false,
+      errors: { email: "Пользователь с таким email уже существует" },
+    };
+  }
+
+  // Хэш пароля и вставка
+  const hash = await bcrypt.hash(password, 10);
+  await sql`
+    INSERT INTO users (name, email, password)
+    VALUES (${name}, ${email}, ${hash})
+  `;
+
+  // На всякий случай инвалидация где нужно (если есть зависимые списки/страницы)
+  revalidatePath("/");
+
+  // Автовход после регистрации
+  try {
+    await signIn("credentials", {
+      email,
+      password,
+      redirectTo: redirectTo || "/dashboard",
+    });
+    // signIn бросит редирект — сюда обычно не дойдём
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof AuthError) {
+      // Если логин не удался — не критично, просим залогиниться вручную
+      return {
+        ok: true,
+        message: "Аккаунт создан. Войдите, используя свой email и пароль.",
+      };
+    }
+    throw error;
+  }
+}
+
+// app/lib/data.ts ==================================================================================
+import postgres from "postgres";
+import { Todo, User } from "./definitions";
+import { auth } from "@/auth";
+
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
+
+export async function fetchTodo() {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return [];
+
+  try {
+    const todos = await sql<Todo[]>`
+      SELECT id, title, completed
+      FROM todo_myday
+      WHERE user_id = ${userId}
+      ORDER BY sort_order ASC, id ASC
+     `;
+    return todos;
+  } catch (error) {
+    console.log("Database Error:", error);
+    throw new Error("Filed to fetch Todo");
+  }
+}
+
+export async function fetchTodoById(id: string) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  try {
+    const data = await sql<Todo[]>`
+      SELECT id, title, completed
+      FROM todo_myday
+      WHERE id = ${id} AND user_id = ${userId};
+    `;
+
+    return data[0];
+  } catch (error) {
+    console.error("Database Error:", error);
+    throw new Error("Failed to fetch invoice.");
+  }
+}
+
+// ✅ Возвращаем email текущего пользователя (одну строку)
+export async function fetchUserEmail(): Promise<string | null> {
+  try {
+    const session = await auth();
+    // // Можно взять прямо из сессии, если она надежно содержит email:
+    const sessionEmail = session?.user?.email ?? null;
+    if (sessionEmail) return sessionEmail;
+
+    // Или запасной вариант — по id из БД:
+    const userId = session?.user?.id;
+    if (!userId) return null;
+
+    const rows = await sql<{ email: string }[]>`
+      SELECT email
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
+    return rows[0]?.email ?? null;
+  } catch (error) {
+    console.error("Database Error:", error);
+    return null;
+  }
+}
+
+// app/lib/definitions.ts ===========================================================================
+export type Todo = {
+  id: string;
+  title: string;
+  completed: boolean;
+};
+
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+};
+
+// app/login/page.tsx ===============================================================================
+import AcmeLogo from "@/app/ui/acme-logo";
+
+import { Suspense } from "react";
+import LoginForm from "../ui/login-form";
+
+export default function LoginPage() {
+  return (
+    <main className="flex items-center justify-center md:h-screen">
+      <div className="relative mx-auto flex w-full max-w-[400px] flex-col space-y-2.5 p-4">
+        <div className="flex w-full items-center justify-center rounded-lg bg-gradient-to-br from-blue-200 to-blue-600 shadow-[0_4px_8px_rgba(0,0,0,0.5)] p-3 h-20 md:h-25">
+          <div className="w-32 text-white md:w-36">
+            <AcmeLogo />
+          </div>
+        </div>
+        <Suspense>
+          <LoginForm />
+        </Suspense>
+      </div>
+    </main>
+  );
+}
+
+// app/register/page.tsx ============================================================================
+import AcmeLogo from "@/app/ui/acme-logo";
+import { Suspense } from "react";
+import RegisterForm from "../ui/register-form";
+
+export default function RegisterPage() {
+  return (
+    <main className="flex items-center justify-center md:h-screen">
+      <div className="relative mx-auto flex w-full max-w-[400px] flex-col space-y-2.5 p-4 md:mt-20">
+        {/* <div className="flex h-20 w-full items-end rounded-lg bg-blue-500 p-3 md:h-36"> */}
+        <div className="flex w-full items-center justify-center rounded-lg bg-gradient-to-br from-blue-200 to-blue-600 shadow-[0_4px_8px_rgba(0,0,0,0.5)] p-3 h-20 md:h-25">
+          <div className="w-32 text-white md:w-36">
+            <AcmeLogo />
+          </div>
+        </div>
+        <Suspense>
+          <RegisterForm />
+        </Suspense>
+      </div>
+    </main>
+  );
+}
+
+// app/ui/dashboard/nav-links.tsx ====================================================================
+"use client";
+
+import clsx from "clsx";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { FaShopify } from "react-icons/fa6";
+import { LuListTodo } from "react-icons/lu";
+import { IoCalendarNumberOutline } from "react-icons/io5";
+import { CiMemoPad } from "react-icons/ci";
+
+// Карта ссылок для отображения в боковой навигации.
+
+export default function NavLinks() {
+  const pathName = usePathname(); // текущий путь пользователя из URL.
+  return (
+    <>
+      <Link
+        className={clsx(
+          "flex grow items-center justify-center gap-2 rounded-md bg-gray-200 p-2 text-[16px] font-medium hover:bg-sky-200 hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3",
+          {
+            "bg-sky-200 text-blue-600": pathName === "/dashboard",
+          }
+        )}
+        href={"/dashboard"}
+      >
+        <IoCalendarNumberOutline className="w-6 h-6" />
+        Календарь
+      </Link>
+      <Link
+        className={clsx(
+          "flex  grow items-center justify-center gap-2 rounded-md bg-gray-200 p-2 text-[16px] font-medium hover:bg-sky-200 hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3",
+          {
+            "bg-sky-200 text-blue-600": pathName === "/dashboard/todo",
+          }
+        )}
+        href={"/dashboard/todo"}
+      >
+        <CiMemoPad className="w-6 h-6" />
+        Дела
+      </Link>
+      <Link
+        className={clsx(
+          "flex grow items-center justify-center gap-2 rounded-md bg-gray-200 p-2 text-[16px] font-medium hover:bg-sky-200 hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3",
+          {
+            "bg-sky-200 text-blue-600": pathName === "/dashboard/shop",
+          }
+        )}
+        href={"/dashboard/shop"}
+      >
+        <FaShopify className="w-6 h-6" />
+        Покупки
+      </Link>
+    </>
+  );
+}
+
+// app/ui/dashboard/sidenav.tsx =======================================================================
+import Link from "next/link";
+import AcmeLogo from "../acme-logo";
+import NavLinks from "./nav-links";
+import { FaPowerOff } from "react-icons/fa6";
+import { IoPowerSharp } from "react-icons/io5";
+import { signOut } from "@/auth";
+import { SubmitButton } from "../submit-button";
+
+type SideNavProps = { email?: string | null };
+
+export default function SideNav({ email }: SideNavProps) {
+  return (
+    <div className="flex flex-col p-2 md:h-full md:px-2">
+      <div className="mb-2 flex  items-center justify-between rounded-md bg-blue-600 p-2 md:h-40 bg-gradient-to-br from-blue-200 to-blue-600">
+        <Link href="/dashboard">
+          <div className=" text-white ">
+            <AcmeLogo />
+          </div>
+        </Link>
+        <div
+          className="text-white text-sm md:text-base truncate max-w-[50%]"
+          title={email ?? ""}
+        >
+          {email ?? ""}
+        </div>
+        <form
+          action={async () => {
+            "use server";
+            await signOut({ redirectTo: "/" });
+          }}
+          className="md:hidden"
+        >
+          <SubmitButton className="py-1 px-2">
+            <IoPowerSharp className="w-6 h-6 text-amber-50" />
+          </SubmitButton>
+        </form>
+      </div>
+      <div className="flex grow flex-row justify-between space-x-2 md:flex-col md:space-x-0 md:space-y-2">
+        <NavLinks />
+        <div className="hidden h-auto w-full grow rounded-md bg-gray-50 md:block"></div>
+      </div>
+      <form
+        action={async () => {
+          "use server";
+          await signOut({ redirectTo: "/" });
+        }}
+        className="hidden md:block"
+      >
+        <button className="flex w-full grow items-center justify-center gap-2 rounded-md bg-gray-50 p-3 text-sm font-medium hover:bg-sky-100 hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3">
+          <FaPowerOff className="w-6" />
+          <div className="hidden md:block">Sign Out</div>
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// app/ui/shop/table-todo-shop.tsx ===================================================================
+"use client";
+
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { DeleteTodo, UpdateInvoiceTodo } from "../todo/buttons";
+import { TbArrowsUpDown } from "react-icons/tb";
+import { CheckboxTodo } from "../todo/checkbox-todo";
+import { toggleTodo } from "@/app/lib/actions";
+
+interface Todo {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+interface Props {
+  todos: Todo[];
+}
+
+// move: Функция для перемещения элемента в массиве. Она копирует исходный массив, удаляет элемент по индексу from и вставляет его на новый индекс to.
+function move<T>(arr: T[], from: number, to: number) {
+  if (from === -1 || to === -1 || from === to) return arr;
+  const copy = [...arr];
+  const [item] = copy.splice(from, 1);
+  copy.splice(to, 0, item);
+  return copy;
+}
+
+// функция получает элемент на экране по координатам, игнорируя тот, который перетаскивается. Это
+// позволяет избежать выбора самого перетаскиваемого элемента.
+function elementFromPointIgnoringDragged(
+  x: number,
+  y: number,
+  draggedId: string | null
+): HTMLElement | null {
+  const draggedEl = draggedId
+    ? (document.querySelector(`[data-id="${draggedId}"]`) as HTMLElement | null)
+    : null;
+
+  let saved: string | null = null;
+  if (draggedEl) {
+    saved = draggedEl.style.pointerEvents;
+    draggedEl.style.pointerEvents = "none";
+  }
+  const el = document.elementFromPoint(x, y) as HTMLElement | null;
+  if (draggedEl) {
+    draggedEl.style.pointerEvents = saved ?? "";
+  }
+  return el;
+}
+
+// функция возвращает ближайший элемент, который может прокручиваться в контейнере. Это нужно для того, чтобы при перетаскивании автоматически прокручивать список, если курсор находится близко к краю экрана.
+function getScrollParent(el: HTMLElement | null): HTMLElement {
+  let node: HTMLElement | null = el;
+  while (node && node !== document.body) {
+    const style = getComputedStyle(node);
+    const overflowY = style.overflowY;
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  // fallback — страница
+  return (document.scrollingElement as HTMLElement) || document.documentElement;
+}
+
+export default function TableTodoShop({ todos }: Props) {
+  // Состояние для списка задач.
+  const [list, setList] = useState<Todo[]>(todos);
+
+  // хранить снимок для отката
+  const snapshotRef = useRef<Todo[] | null>(null);
+
+  // отдельный снимок для отката удаления (не мешаем DnD-снапшоту)
+  const deleteSnapshotRef = useRef<Todo[] | null>(null);
+
+  // подсветка последней задачи
+  const prevIdsRef = useRef<Set<string>>(new Set(todos.map((t) => t.id)));
+  const lastCreatedIdRef = useRef<string | null>(null);
+
+  function flashRow(el: HTMLElement) {
+    el.classList.add("ring-2", "ring-emerald-400", "animate-pulse");
+    setTimeout(() => {
+      el.classList.remove("ring-2", "ring-emerald-400", "animate-pulse");
+    }, 500);
+  }
+
+  // 1) Один эффект: синхронизируем список и фиксируем id новой задачи
+  useEffect(() => {
+    // находим новый id (которого раньше не было)
+    const prev = prevIdsRef.current;
+    const nextSet = new Set(todos.map((t) => t.id));
+    const newTodo = todos.find((t) => !prev.has(t.id)) || null;
+
+    prevIdsRef.current = nextSet;
+
+    // обновляем локальный список
+    setList(todos);
+
+    // запоминаем для скролла после коммита
+    lastCreatedIdRef.current = newTodo?.id ?? null;
+  }, [todos]);
+
+  // 2) Скроллим ПОСЛЕ того, как DOM обновился
+  useLayoutEffect(() => {
+    const id = lastCreatedIdRef.current;
+    if (!id) return;
+
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.querySelector<HTMLElement>(`[data-id="${id}"]`);
+      if (el) {
+        // block: 'end' или 'center' обычно надёжнее, чем 'nearest'
+        el.scrollIntoView({
+          block: "end",
+          inline: "nearest",
+          behavior: "smooth",
+        });
+        flashRow(el);
+        lastCreatedIdRef.current = null;
+      } else if (attempts++ < 3) {
+        // Если элемент ещё не в DOM, подождём 1–2 кадра
+        requestAnimationFrame(tryScroll);
+      } else {
+        // Фоллбек — прокрутить в самый низ скролл-контейнер/страницу
+        const scrollEl = getScrollParent(containerRef.current);
+        if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+        lastCreatedIdRef.current = null;
+      }
+    };
+
+    // Ждём кадр после коммита и пробуем
+    requestAnimationFrame(tryScroll);
+  }, [list.length]);
+
+  // DnD state
+  // Идентификатор текущей перетаскиваемой задачи.
+  const [dragId, setDragId] = useState<string | null>(null);
+  // Идентификатор задачи, на которую наведена перетаскиваемая.
+  const [hoverId, setHoverId] = useState<string | null>(null);
+
+  // Touch preview state
+  // Координаты касания для мобильных устройств.
+  const [touchXY, setTouchXY] = useState<{ x: number; y: number } | null>(null);
+  // Смещение курсора относительно элемента.
+  const [dragOffset, setDragOffset] = useState<{
+    dx: number;
+    dy: number;
+  } | null>(null);
+  // Размеры перетаскиваемого элемента.
+  const [dragSize, setDragSize] = useState<{ w: number; h: number } | null>(
+    null
+  );
+
+  // Обработчик для события перетаскивания с помощью мыши. Он предотвращает стандартное поведение и обновляет состояние списка задач, чтобы переместить задачу.
+  const onMouseDragOverCapture = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!dragId) return;
+    e.preventDefault();
+
+    const x = e.clientX;
+    const y = e.clientY;
+
+    const scrollEl = getScrollParent(containerRef.current);
+    autoScrollIfNearEdgeXY(scrollEl, x, y);
+
+    const el = elementFromPointIgnoringDragged(x, y, dragId);
+    const row = el ? (el.closest("[data-id]") as HTMLElement | null) : null;
+
+    if (!row) {
+      setHoverId(null);
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
+      return;
+    }
+
+    const targetId = row.dataset.id!;
+    setHoverId(targetId);
+
+    setList((prev) => {
+      const from = prev.findIndex((t) => t.id === dragId);
+      const to = prev.findIndex((t) => t.id === targetId);
+      if (from === -1 || to === -1) return prev;
+
+      const rect = row.getBoundingClientRect();
+      const overBottomHalf = y - rect.top > rect.height / 2;
+
+      // Вставка: выше цели (верхняя половина) или ниже цели (нижняя половина)
+      let insertIndex = to + (overBottomHalf ? 1 : 0);
+
+      // Если мы вырезаем элемент до точки вставки, индекс смещается на -1
+      if (from < insertIndex) insertIndex -= 1;
+
+      if (insertIndex === from) return prev;
+      return move(prev, from, insertIndex);
+    });
+
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  };
+
+  // Функции автоскроллинга
+  const lastAutoScroll = useRef<number>(0);
+  function autoScrollIfNearEdgeXY(
+    container: HTMLElement,
+    x: number,
+    y: number
+  ) {
+    const now = performance.now();
+    if (now - lastAutoScroll.current < 16) return; // ~60fps
+
+    const margin = 60; // "чувствительная зона" возле краёв
+    const speed = 14; // пикселей за тик
+
+    const rect = container.getBoundingClientRect();
+
+    // Вертикальный скролл
+    if (y < rect.top + margin) {
+      container.scrollTop -= speed;
+      lastAutoScroll.current = now;
+    } else if (y > rect.bottom - margin) {
+      container.scrollTop += speed;
+      lastAutoScroll.current = now;
+    }
+  }
+
+  // Унифицируем коммит порядка (и откат при ошибке)
+  async function persistOrderAndCleanup() {
+    try {
+      const res = await fetch("/api/todos/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: list.map((t) => t.id) }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to reorder");
+      }
+
+      snapshotRef.current = null;
+    } catch (err) {
+      if (snapshotRef.current) setList(snapshotRef.current);
+    } finally {
+      setHoverId(null);
+      setDragId(null);
+      setTouchXY(null);
+      setDragOffset(null);
+      setDragSize(null);
+      if (dragImageRef.current) {
+        dragImageRef.current.remove();
+        dragImageRef.current = null;
+      }
+    }
+  }
+
+  // ==== МЫШЬ (HTML5 DnD) ==== (стартуем ТОЛЬКО с ручки)
+  // Создаёт теневой эффект для элемента, когда начинается перетаскивание.
+  const createShadow = (e: React.DragEvent<HTMLElement>) => {
+    (e.currentTarget as HTMLElement).style.boxShadow =
+      "0 8px 10px rgba(0,0,0,0.6)";
+  };
+  const clearShadow = (e: React.DragEvent<HTMLElement>) => {
+    (e.currentTarget as HTMLElement).style.boxShadow = "";
+  };
+
+  // Хранилище клона для мыши
+  const dragImageRef = useRef<HTMLElement | null>(null);
+  // Обработчик события начала перетаскивания. Создаёт "призрак" элемента (внешний вид клонированного элемента), который будет перемещаться по экрану при перетаскивании.
+  const onHandleDragStart = (
+    e: React.DragEvent<HTMLButtonElement>,
+    id: string
+  ) => {
+    // фиксируем список ДО изменений для возможного отката
+    snapshotRef.current = list;
+
+    setDragId(id);
+
+    const row = (e.currentTarget as HTMLElement).closest(
+      "[data-id]"
+    ) as HTMLElement | null;
+
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+
+      if (row) {
+        // Считаем размеры и смещения до старта
+        const rect = row.getBoundingClientRect();
+        const { clientX, clientY } = e;
+        const offsetX = Math.max(0, clientX - rect.left);
+        const offsetY = Math.max(0, clientY - rect.top);
+        // Клонируем строку как «призрак»
+        const clone = row.cloneNode(true) as HTMLElement;
+        // ВАЖНО: фиксируем размеры клона в пикселях,
+        // чтобы не сработал w-full (100%)
+        Object.assign(clone.style, {
+          position: "fixed",
+          top: "-10000px",
+          left: "-10000px",
+          pointerEvents: "none",
+          boxShadow: "0 12px 20px rgba(0,0,0,0.45)",
+          opacity: "1",
+          width: `${rect.width}px`,
+          height: `${rect.height}px`,
+          boxSizing: "border-box",
+        } as CSSStyleDeclaration);
+        // Дополнительно (не обязательно, но безопасно):
+        clone.classList.remove("w-full");
+        document.body.appendChild(clone);
+        dragImageRef.current = clone;
+        // Подменяем стандартный ghost на наш клон
+        e.dataTransfer.setDragImage(clone, offsetX, offsetY);
+      } else {
+        // fallback: пустая картинка
+        const img = new Image();
+        img.src =
+          "data:image/svg+xml;charset=utf-8," +
+          encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"/>');
+        e.dataTransfer.setDragImage(img, 0, 0);
+      }
+    }
+  };
+
+  const onRowDragEnd = async (e: React.DragEvent<HTMLDivElement>) => {
+    clearShadow(e);
+    await persistOrderAndCleanup();
+  };
+
+  const onRowDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    createShadow(e);
+  };
+
+  const onRowDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    clearShadow(e);
+    setHoverId(null);
+    setDragId(null);
+  };
+
+  // ==== TOUCH DnD (стартуем ТОЛЬКО с ручки) ====
+  // Аналогичные обработчики для мобильных устройств с поддержкой касания. Обрабатывает начальную точку касания и начинает процесс перетаскивания.
+  const onHandleTouchStart = (
+    e: React.TouchEvent<HTMLButtonElement>,
+    id: string
+  ) => {
+    if (e.touches.length !== 1) return;
+
+    // фиксируем список ДО изменений для возможного отката
+    snapshotRef.current = list;
+
+    const t = e.touches[0];
+    const row = (e.currentTarget as HTMLElement).closest(
+      "[data-id]"
+    ) as HTMLElement | null;
+    if (!row) return;
+    const rect = row.getBoundingClientRect();
+
+    setDragId(id);
+    setTouchXY({ x: t.clientX, y: t.clientY });
+    setDragOffset({ dx: t.clientX - rect.left, dy: t.clientY - rect.top });
+    setDragSize({ w: rect.width, h: rect.height });
+    setHoverId(id);
+  };
+
+  // глобальные обработчики touch-перетаскивания во время активного dnd
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const onTouchMoveCapture = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!dragId) return;
+    e.preventDefault();
+
+    const t = e.touches[0];
+    const x = t.clientX;
+    const y = t.clientY;
+    setTouchXY({ x, y });
+
+    // autoScrollIfNearEdge(y);
+    // >>> автоскроллим именно скролл-контейнер (родителя), а не окно
+    const scrollEl = getScrollParent(containerRef.current as HTMLElement);
+    autoScrollIfNearEdgeXY(scrollEl, x, y);
+
+    const el = elementFromPointIgnoringDragged(x, y, dragId);
+    const row = el ? (el.closest("[data-id]") as HTMLElement | null) : null;
+
+    if (!row) {
+      setHoverId(null);
+      return;
+    }
+
+    const targetId = row.dataset.id!;
+    setHoverId(targetId);
+
+    setList((prev) => {
+      const from = prev.findIndex((tt) => tt.id === dragId);
+      const to = prev.findIndex((tt) => tt.id === targetId);
+      if (from === -1 || to === -1) return prev;
+
+      const rect = row.getBoundingClientRect();
+      const overBottomHalf = y - rect.top > rect.height / 2;
+
+      let insertIndex = to + (overBottomHalf ? 1 : 0);
+      if (from < insertIndex) insertIndex -= 1;
+
+      if (insertIndex === from) return prev;
+      return move(prev, from, insertIndex);
+    });
+  };
+
+  const onTouchEndCapture = async () => {
+    if (!dragId) return;
+    await persistOrderAndCleanup();
+  };
+
+  //  touchcancel — иногда система отменяет жест
+  const onTouchCancelCapture = async () => {
+    if (!dragId) return;
+    await persistOrderAndCleanup();
+  };
+
+  const draggingTodo = dragId ? list.find((t) => t.id === dragId) : null;
+
+  // оптимистическое обновление
+  async function handleToggleOptimistic(id: string, next: boolean) {
+    // оптимистично обновляем UI
+    setList((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
+    );
+
+    // пробуем отправить на сервер
+    try {
+      await toggleTodo(id); // если toggleTodo принимает только id
+    } catch (e) {
+      // откат при ошибке
+      setList((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, completed: !next } : t))
+      );
+    }
+  }
+
+  // оптимистическое удаление
+  function handleDeleteOptimistic(id: string) {
+    deleteSnapshotRef.current = list;
+    setList((prev) => prev.filter((t) => t.id !== id));
+  }
+  function revertDelete() {
+    if (deleteSnapshotRef.current) {
+      setList(deleteSnapshotRef.current);
+      deleteSnapshotRef.current = null;
+    }
+  }
+
+  return (
+    <div className="flow-root">
+      <div className="min-w-full text-gray-900">
+        <div className="bg-sky-200" ref={containerRef}>
+          {list.map((todo) => {
+            const isDragging = dragId === todo.id;
+            return (
+              <div
+                key={todo.id}
+                data-id={todo.id}
+                // ВАЖНО: строка НЕ draggable
+                onDragOver={onRowDragOver}
+                onDragLeave={clearShadow}
+                onDragEnd={onRowDragEnd}
+                onDrop={onRowDrop}
+                onTouchMoveCapture={onTouchMoveCapture}
+                onTouchEndCapture={onTouchEndCapture}
+                onTouchCancelCapture={onTouchCancelCapture}
+                onDragOverCapture={onMouseDragOverCapture}
+                // ВАЖНО: убрали overflowY: "auto"
+                style={{ touchAction: "pan-y" }} // overflowY по месту
+                className={[
+                  `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
+                  ${todo.completed ? "opacity-40" : ""}`,
+                  isDragging ? "opacity-0" : "",
+                ].join(" ")}
+              >
+                {/* Ручка DnD: ТОЛЬКО тут можно начать перетаскивать */}
+                <button
+                  type="button"
+                  aria-label="Перетащить"
+                  className="p-1 cursor-grab active:cursor-grabbing touch-none border-gray-500 border-2 rounded hover:border-gray-800 m-1"
+                  draggable
+                  onDragStart={(e) => onHandleDragStart(e, todo.id)}
+                  onTouchStart={(e) => onHandleTouchStart(e, todo.id)}
+                >
+                  <TbArrowsUpDown className="w-5 h-5 " />
+                </button>
+
+                <div className="w-full ml-2 select-text">{todo.title}</div>
+
+                <div className="flex p-1 md:p-1 items-center justify-end">
+                  <CheckboxTodo
+                    id={todo.id}
+                    completed={todo.completed}
+                    onToggle={(next) => handleToggleOptimistic(todo.id, next)}
+                  />
+                  <UpdateInvoiceTodo id={todo.id} />
+                  {/* <DeleteTodo title={todo.title} /> */}
+                  <DeleteTodo
+                    id={todo.id}
+                    onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
+                    onRevert={revertDelete}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Превью перетаскиваемого элемента под пальцем (только для touch) */}
+      {dragId && touchXY && dragOffset && draggingTodo && (
+        <div
+          className="fixed z-50 pointer-events-none left-0 top-0 select-none"
+          style={{
+            transform: `translate(${touchXY.x - dragOffset.dx}px, ${
+              touchXY.y - dragOffset.dy
+            }px)`,
+          }}
+        >
+          <div
+            className={[
+              "flex items-center bg-white border-gray-500 border-2 md:border-3 rounded text-sm",
+              "shadow-[0_12px_20px_rgba(0,0,0,0.45)] ring-2 ring-amber-400",
+            ].join(" ")}
+            style={{
+              width: dragSize?.w,
+              height: dragSize?.h,
+            }}
+          >
+            <div className="p-1 md:p-2">
+              <TbArrowsUpDown className="w-5 h-5" />
+            </div>
+            <div className="w-full">{draggingTodo.title}</div>
+            <div className="flex p-1 md:p-1 items-center justify-end">
+              {/* Некликабельно из-за pointer-events: none на враппере */}
+
+              <UpdateInvoiceTodo id={draggingTodo.id} />
+              {/* <DeleteTodo title={draggingTodo.title} /> */}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// app/ui/login-form.tsx ============================================================================
+"use client";
+import { lusitana } from "@/app/ui/fonts";
+import {
+  AtSymbolIcon,
+  KeyIcon,
+  ExclamationCircleIcon,
+  EyeIcon,
+  EyeSlashIcon,
+} from "@heroicons/react/24/outline";
+import { ArrowRightIcon } from "@heroicons/react/20/solid";
+import { Button } from "./button";
+import { useActionState, useState } from "react";
+import { authenticate } from "@/app/lib/actions";
+import { useSearchParams } from "next/navigation";
+import { signIn as signInClient } from "next-auth/react";
+
+export default function LoginForm() {
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const [errorMessage, formAction, isPending] = useActionState(
+    authenticate,
+    undefined
+  );
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <form action={formAction} className="space-y-3">
+      <div className="flex-1 rounded-lg bg-gray-200 px-6 pb-4 pt-8">
+        <h1 className={`${lusitana.className} mb-3 text-2xl`}>
+          Войдите, чтобы продолжить
+        </h1>
+        <div className="w-full">
+          <div>
+            <label
+              className="mb-3 mt-5 block text-xs font-medium text-gray-900"
+              htmlFor="email"
+            >
+              Email
+            </label>
+            <div className="relative">
+              <input
+                className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
+                id="email"
+                type="email"
+                name="email"
+                placeholder="Enter your email address"
+                required
+              />
+              <AtSymbolIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <label
+              className="mb-3 mt-5 block text-xs font-medium text-gray-900"
+              htmlFor="password"
+            >
+              Пароль
+            </label>
+            <div className="relative">
+              <input
+                className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 pr-10 text-sm outline-2 placeholder:text-gray-500"
+                id="password"
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Enter password"
+                required
+                minLength={6}
+              />
+              <KeyIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 focus:outline-none"
+                aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+              >
+                {showPassword ? (
+                  <EyeSlashIcon className="h-[18px] w-[18px]" />
+                ) : (
+                  <EyeIcon className="h-[18px] w-[18px]" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+        <input type="hidden" name="redirectTo" value={callbackUrl} />
+        <Button
+          className="h-10 px-4 mt-4 w-full text-shadow-lg/40 5 5"
+          aria-disabled={isPending}
+        >
+          Войти <ArrowRightIcon className="ml-auto h-5 w-5 text-gray-50" />
+        </Button>
+
+        {/* Разделитель */}
+        <div className="my-4 flex items-center">
+          <div className="h-px flex-1 bg-gray-300" />
+          <span className="px-3 text-xs text-gray-500">или</span>
+          <div className="h-px flex-1 bg-gray-300" />
+        </div>
+
+        {/* Кнопка Google */}
+        <button
+          type="button"
+          onClick={() => signInClient("google", { redirectTo: callbackUrl })}
+          className="h-10 w-full rounded-md bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 text-sm font-medium"
+        >
+          Войти с Google
+        </button>
+
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          className="flex h-8 items-end space-x-1"
+        >
+          {/* Add form errors here */}
+          {errorMessage && (
+            <>
+              <ExclamationCircleIcon className="h-5 w-5 text-red-500" />
+              <p className="text-sm text-red-500">{errorMessage}</p>
+            </>
+          )}
+        </div>
+        <p className="mt-2 text-center text-sm text-gray-600">
+          Нет аккаунта?{" "}
+          <a className="text-blue-600 underline" href="/register">
+            Зарегистрироваться
+          </a>
+        </p>
+      </div>
+    </form>
+  );
+}
+
+// app/ui/register-form.tsx =========================================================================
+"use client";
+
+import { useActionState, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { ArrowRightIcon } from "@heroicons/react/20/solid";
+import {
+  AtSymbolIcon,
+  KeyIcon,
+  UserIcon,
+  ExclamationCircleIcon,
+  EyeIcon,
+  EyeSlashIcon,
+} from "@heroicons/react/24/outline";
+import { register, type RegisterState } from "@/app/lib/actions";
+import { Button } from "./button";
+import { lusitana } from "@/app/ui/fonts";
+
+export default function RegisterForm() {
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+
+  const [state, formAction, isPending] = useActionState<
+    RegisterState,
+    FormData
+  >(register, { ok: false });
+
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <form action={formAction} className="space-y-3">
+      <div className="flex-1 rounded-lg bg-gray-200 px-6 pb-4 pt-8">
+        <h1 className={`${lusitana.className} mb-3 text-2xl`}>
+          Создайте аккаунт
+        </h1>
+
+        <div className="w-full">
+          {/* Name */}
+          <label
+            className="mb-2 mt-3 block text-xs font-medium text-gray-900"
+            htmlFor="name"
+          >
+            Имя
+          </label>
+          <div className="relative">
+            <input
+              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
+              id="name"
+              name="name"
+              type="text"
+              placeholder="Ваше имя"
+              required
+            />
+            <UserIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+          </div>
+          {state?.errors?.name && (
+            <p className="mt-1 text-xs text-red-500">{state.errors.name}</p>
+          )}
+
+          {/* Email */}
+          <label
+            className="mb-2 mt-4 block text-xs font-medium text-gray-900"
+            htmlFor="email"
+          >
+            Email
+          </label>
+          <div className="relative">
+            <input
+              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
+              id="email"
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              required
+            />
+            <AtSymbolIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+          </div>
+          {state?.errors?.email && (
+            <p className="mt-1 text-xs text-red-500">{state.errors.email}</p>
+          )}
+
+          {/* Password */}
+          <label
+            className="mb-2 mt-4 block text-xs font-medium text-gray-900"
+            htmlFor="password"
+          >
+            Пароль
+          </label>
+          <div className="relative">
+            <input
+              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 pr-10 text-sm outline-2 placeholder:text-gray-500"
+              id="password"
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder="Минимум 6 символов"
+              required
+              minLength={6}
+            />
+            <KeyIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 focus:outline-none"
+              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="h-[18px] w-[18px]" />
+              ) : (
+                <EyeIcon className="h-[18px] w-[18px]" />
+              )}
+            </button>
+          </div>
+          {state?.errors?.password && (
+            <p className="mt-1 text-xs text-red-500">{state.errors.password}</p>
+          )}
+
+          {/* Confirm */}
+          <label
+            className="mb-2 mt-4 block text-xs font-medium text-gray-900"
+            htmlFor="confirm"
+          >
+            Подтвердите пароль
+          </label>
+          <div className="relative">
+            <input
+              className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 pr-10 text-sm outline-2 placeholder:text-gray-500"
+              id="confirm"
+              name="confirm"
+              type={showPassword ? "text" : "password"}
+              placeholder="Повторите пароль"
+              required
+              minLength={6}
+            />
+            <KeyIcon className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500 peer-focus:text-gray-900" />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 focus:outline-none"
+              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="h-[18px] w-[18px]" />
+              ) : (
+                <EyeIcon className="h-[18px] w-[18px]" />
+              )}
+            </button>
+          </div>
+          {state?.errors?.confirm && (
+            <p className="mt-1 text-xs text-red-500">{state.errors.confirm}</p>
+          )}
+        </div>
+
+        {/* redirectTo, чтобы после регистрации попадать туда же, куда и после логина */}
+        <input type="hidden" name="redirectTo" value={callbackUrl} />
+
+        <Button
+          className="h-10 px-4 mt-4 w-full text-shadow-lg/40 5 5"
+          aria-disabled={isPending}
+        >
+          Зарегистрироваться
+          <ArrowRightIcon className="ml-auto h-5 w-5 text-gray-50" />
+        </Button>
+
+        {/* Общие сообщения */}
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          className="flex h-8 items-end space-x-1"
+        >
+          {state?.message && (
+            <>
+              <ExclamationCircleIcon className="h-5 w-5 text-amber-500" />
+              <p className="text-sm text-amber-600">{state.message}</p>
+            </>
+          )}
+        </div>
+
+        <p className="mt-2 text-center text-sm text-gray-600">
+          Уже есть аккаунт?{" "}
+          <a className="text-blue-600 underline" href="/login">
+            Войти
+          </a>
+        </p>
+      </div>
+    </form>
+  );
+}
+
+// app/layout.tsx ====================================================================================
+import "@/app/ui/global.css";
+import { inter } from "./ui/fonts";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className="h-full">
+      <body className={`${inter.className} antialiased h-full`}>
+        {children}
+      </body>
+    </html>
+  );
+}
+
+// app/page.tsx =====================================================================================
+import Link from "next/link";
+import { lusitana } from "./ui/fonts";
+import { CiLogin } from "react-icons/ci";
+
+export default function Page() {
+  return (
+    <main className="flex min-h-screen flex-col p-6">
+      <div className="flex h-20 shrink-0 justify-center items-center rounded-lg text-shadow-lg/40 shadow-[0_4px_8px_rgba(0,0,0,0.5)] bg-gradient-to-br from-blue-200 to-blue-600 p-4 md:h-52">
+        <div
+          className={`${lusitana.className} flex items-center leading-none text-white`}
+        >
+          <p className="text-[44px]">myDay24</p>
+        </div>
+      </div>
+      <div className="mt-4 flex justify-center items-center gap-4 md:flex-row">
+        <Link
+          href="/login"
+          className="flex items-center gap-5 self-start rounded-lg px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-400 md:text-base text-shadow-lg/40 shadow-[0_4px_8px_rgba(0,0,0,0.5)] bg-gradient-to-br from-blue-200 to-blue-600 hover:to-blue-800 "
+        >
+          <span>Войти</span> <CiLogin className="w-8 h-8" />
+        </Link>
+      </div>
+    </main>
+  );
+}
+
+// auth.config.ts =====================================================================================
+import type { NextAuthConfig } from "next-auth";
+
+export const authConfig = {
+  pages: {
+    signIn: "/login",
+  },
+  callbacks: {
+    authorized({ auth, request: { nextUrl } }) {
+      const isLoggedIn = !!auth?.user;
+      const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
+      if (isOnDashboard) {
+        if (isLoggedIn) return true;
+        return false; // Redirect unauthenticated users to login page
+      } else if (isLoggedIn) {
+        return Response.redirect(new URL("/dashboard", nextUrl));
+      }
+      return true;
+    },
+  },
+  providers: [], // Add providers with an empty array for now
+} satisfies NextAuthConfig;
+
+// auth.ts ===========================================================================================
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
+import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
+import { z } from "zod";
+import type { User } from "@/app/lib/definitions";
+import bcrypt from "bcryptjs";
+import postgres from "postgres";
+import type { JWT } from "next-auth/jwt";
+
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
+
+async function getUser(email: string): Promise<User | undefined> {
+  try {
+    const user = await sql<User[]>`SELECT * FROM users WHERE email=${email}`;
+    return user[0];
+  } catch (error) {
+    console.error("Failed to fetch user:", error);
+    throw new Error("Failed to fetch user.");
+  }
+}
+
+export const {
+  auth,
+  signIn,
+  signOut,
+  handlers: { GET, POST },
+} = NextAuth({
+  ...authConfig,
+  providers: [
+    Google({
+      clientId: process.env.AUTH_GOOGLE_ID!,
+      clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+      allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          scope: "openid email profile",
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code",
+        },
+      },
+    }),
+    Credentials({
+      async authorize(credentials) {
+        const parsed = z
+          .object({ email: z.email(), password: z.string().min(6) })
+          .safeParse(credentials);
+        if (!parsed.success) return null;
+
+        const { email, password } = parsed.data;
+        const user = await getUser(email);
+        if (!user) return null;
+
+        const ok = await bcrypt.compare(password, user.password);
+        if (!ok) return null;
+
+        // ВАЖНО: вернуть объект с id, чтобы jwt получил его сразу
+        return { id: user.id, name: user.name, email: user.email };
+      },
+    }),
+  ],
+
+  callbacks: {
+    // создаем/проверяем пользователя в БД
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "google") {
+        const email = user?.email;
+        const name = user?.name || (profile as any)?.name || "GoogleUser";
+
+        if (!email) {
+          console.error("Google sign-in: No email provided");
+          return false;
+        }
+
+        try {
+          // Создаем пользователя, если его нет
+          await sql`
+            INSERT INTO users (name, email, password)
+            VALUES (${name}, ${email}, ${null})
+            ON CONFLICT (email) DO NOTHING
+          `;
+          console.log("Google user ensured in DB:", email);
+        } catch (e) {
+          console.error("Failed to create Google user:", e);
+          return false;
+        }
+      }
+      return true;
+    },
+
+    // получаем userId (пользователь точно есть в БД)
+    // async jwt({ token, user, account }) {
+    //   // При первом входе через Credentials
+    //   if (user?.id) {
+    //     token.userId = user.id;
+    //     console.log("JWT: userId from Credentials:", user.id);
+    //   }
+
+    //   // При первом входе через Google или при обновлении токена
+    //   if (!token.userId && token.email) {
+    //     const dbUser = await getUser(token.email);
+    //     if (dbUser) {
+    //       token.userId = dbUser.id;
+    //       console.log(
+    //         "JWT: userId from DB:",
+    //         dbUser.id,
+    //         "for email:",
+    //         token.email
+    //       );
+    //     } else {
+    //       console.error("❌ JWT: No user found in DB for email:", token.email);
+    //     }
+    //   }
+
+    //   return token as JWT & { userId?: string };
+    // },
+    async jwt({ token, user, account }) {
+      // Для Credentials берем id напрямую (это уже наш DB id)
+      if (user?.id && account?.provider === "credentials") {
+        token.userId = user.id;
+        console.log("JWT: userId from Credentials:", user.id);
+      }
+      // Для Google (или при обновлении токена) - ВСЕГДА получаем из БД
+      else if (
+        token.email &&
+        (!token.userId || account?.provider === "google")
+      ) {
+        const dbUser = await getUser(token.email);
+        if (dbUser) {
+          token.userId = dbUser.id;
+          console.log("JWT: userId from DB:", dbUser.id, "for", token.email);
+        } else {
+          console.error("JWT: No user in DB for:", token.email);
+        }
+      }
+
+      return token as JWT & { userId?: string };
+    },
+
+    // Передаем userId в сессию
+    async session({ session, token }) {
+      if (token?.userId) {
+        // ts-expect-error расширяем тип
+        session.user.id = token.userId as string;
+        console.log("Session: userId set:", token.userId);
+      } else {
+        console.error("Session: No userId in token!");
+      }
+      return session;
+    },
+
+    ...authConfig.callbacks,
+  },
+});
+
+
+// middleware.ts ======================================================================================
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
+
+export default NextAuth(authConfig).auth;
+
+export const config = {
+  // https://nextjs.org/docs/app/building-your-application/routing/middleware#matcher
+  matcher: ["/((?!api|_next/static|_next/image|.*\\.png$).*)"],
+  runtime: "nodejs",
+};
