@@ -7,19 +7,29 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 export async function fetchTodo() {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) return [];
+
+  console.log("📋 fetchTodo called");
+  console.log("   Session:", JSON.stringify(session, null, 2));
+  console.log("   UserId:", userId);
+
+  // if (!userId) return [];
+  if (!userId) {
+    console.warn("⚠️ No userId in session!");
+    return [];
+  }
 
   try {
     const todos = await sql<Todo[]>`
-      SELECT id, title, completed
+      SELECT id, title, completed, user_id
       FROM todo_myday
       WHERE user_id = ${userId}
       ORDER BY sort_order ASC, id ASC
-     `;
+    `;
+    console.log(`✅ Found ${todos.length} todos for user ${userId}`);
     return todos;
   } catch (error) {
-    console.log("Database Error:", error);
-    throw new Error("Filed to fetch Todo");
+    console.error("❌ Database Error:", error);
+    throw new Error("Failed to fetch Todo");
   }
 }
 
