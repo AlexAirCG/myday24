@@ -24,31 +24,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // // Обновляем sort_order по позиции в массиве
-    // await sql`
-    //   WITH data AS (
-    //     SELECT id::uuid, ord::int AS pos
-    //     FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS u(id, ord)
-    //   )
-    //   UPDATE todo_myday AS t
-    //   SET sort_order = d.pos
-    //   FROM data d
-    //   WHERE t.id = d.id
-    // `;
-    // Обновляем только те id, которые принадлежат текущему пользователю
-    await sql`
-      WITH data AS (
-        SELECT id::uuid, ord::int AS pos
-        FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS u(id, ord)
-      )
-      UPDATE todo_myday AS t
-      SET sort_order = d.pos
-      FROM data d
-      WHERE t.id = d.id AND t.user_id = ${userId}
-    `;
-    // Инвалидируем нужную страницу/сегмент
-    revalidatePath("/dashboard/todo");
+    // Используем транзакцию
+    await sql.begin(async (tx) => {
+      // Option 1: Using unnest (PostgreSQL)
+      await tx`
+    WITH new_orders AS (
+      SELECT unnest(${sql.array(ids)}::uuid[]) AS id,
+             unnest(${sql.array(ids.map((_, i) => i + 1))}::int[]) AS new_order
+    )
+    UPDATE todo_myday
+    SET sort_order = new_orders.new_order
+    FROM new_orders
+    WHERE todo_myday.id = new_orders.id 
+      AND todo_myday.user_id = ${userId}
+  `;
+    });
 
+    revalidatePath("/dashboard/todo");
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("reorder error", err);

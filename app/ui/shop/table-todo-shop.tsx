@@ -449,7 +449,14 @@ export default function TableTodoShop({ todos }: Props) {
   return (
     <div className="flow-root">
       <div className="min-w-full text-gray-900">
-        <div className="bg-sky-200" ref={containerRef}>
+        <div
+          className="bg-sky-200"
+          ref={containerRef}
+          onTouchMoveCapture={onTouchMoveCapture}
+          onTouchEndCapture={onTouchEndCapture}
+          onTouchCancelCapture={onTouchCancelCapture}
+          onDragOverCapture={onMouseDragOverCapture}
+        >
           {list.map((todo) => {
             const isDragging = dragId === todo.id;
             return (
@@ -461,10 +468,6 @@ export default function TableTodoShop({ todos }: Props) {
                 onDragLeave={clearShadow}
                 onDragEnd={onRowDragEnd}
                 onDrop={onRowDrop}
-                onTouchMoveCapture={onTouchMoveCapture}
-                onTouchEndCapture={onTouchEndCapture}
-                onTouchCancelCapture={onTouchCancelCapture}
-                onDragOverCapture={onMouseDragOverCapture}
                 // ВАЖНО: убрали overflowY: "auto"
                 style={{ touchAction: "pan-y" }} // overflowY по месту
                 className={[
