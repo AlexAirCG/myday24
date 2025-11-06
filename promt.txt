@@ -34,6 +34,7 @@ app/layout.tsx
 app/page.tsx
 auth.config.ts
 auth.ts
+
 // postgreSQL ============================================================================================
 // users =========
 id	 uuid [uuid_generate_v4()]	
@@ -54,14 +55,18 @@ PRIMARY	id
 INDEX	sort_order, id
 INDEX	user_id
 UNIQUE	user_id, sort_order
+
 // app/api/auth/[...nextauth]/route.ts ====================================================================
 export { GET, POST } from "@/auth";
+
 // app/api/todos/reorder/route.ts =========================================================================
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import postgres from "postgres";
 import { auth } from "@/auth";
+
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
+
 export async function POST(req: Request) {
   try {
     const session = await auth();
@@ -71,25 +76,32 @@ export async function POST(req: Request) {
         { ok: false, error: "Unauthorized" },
         { status: 401 }
       );
+
     const { ids } = (await req.json()) as { ids?: string[] };
+
     if (!Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json(
         { ok: false, error: "ids must be a non-empty array" },
         { status: 400 }
       );
     }
-    // Обновляем только те id, которые принадлежат текущему пользователю
-    await sql`
-      WITH data AS (
-        SELECT id::uuid, ord::int AS pos
-        FROM unnest(${ids}::uuid[]) WITH ORDINALITY AS u(id, ord)
-      )
-      UPDATE todo_myday AS t
-      SET sort_order = d.pos
-      FROM data d
-      WHERE t.id = d.id AND t.user_id = ${userId}
-    `;
-    // Инвалидируем нужную страницу/сегмент
+
+    // Используем транзакцию
+    await sql.begin(async (tx) => {
+      // Option 1: Using unnest (PostgreSQL)
+      await tx`
+    WITH new_orders AS (
+      SELECT unnest(${sql.array(ids)}::uuid[]) AS id,
+             unnest(${sql.array(ids.map((_, i) => i + 1))}::int[]) AS new_order
+    )
+    UPDATE todo_myday
+    SET sort_order = new_orders.new_order
+    FROM new_orders
+    WHERE todo_myday.id = new_orders.id 
+      AND todo_myday.user_id = ${userId}
+  `;
+    });
+
     revalidatePath("/dashboard/todo");
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -100,6 +112,7 @@ export async function POST(req: Request) {
     );
   }
 }
+
 // app/dashboard/todo/[id]/edit/page.tsx ==================================================================
 import { fetchTodoById } from "@/app/lib/data";
 import Breadcrumbs from "@/app/ui/todo/breadcrumbs";
@@ -124,6 +137,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     </main>
   );
 }
+
 // app/dashboard/todo/page.tsx ========================================================================
 import { fetchTodo } from "@/app/lib/data";
 import { inter } from "@/app/ui/fonts";
@@ -151,6 +165,7 @@ export default async function Page() {
     </div>
   );
 }
+
 // app/dashboard/layout.tsx ============================================================================
 import SideNav from "../ui/dashboard/sidenav";
 import { fetchUserEmail } from "../lib/data";
@@ -173,6 +188,7 @@ export default async function Layout({
     </div>
   );
 }
+
 // app/dashboard/page.tsx ===========================================================================
 "use client";
 import { useState } from "react";
@@ -201,6 +217,7 @@ export default function Page() {
     </div>
   );
 }
+
 // app/lib/actions.ts ==================================================================================
 "use server";
 import { revalidatePath } from "next/cache";
@@ -1101,7 +1118,14 @@ export default function TableTodoShop({ todos }: Props) {
   return (
     <div className="flow-root">
       <div className="min-w-full text-gray-900">
-        <div className="bg-sky-200" ref={containerRef}>
+        <div
+          className="bg-sky-200"
+          ref={containerRef}
+          onTouchMoveCapture={onTouchMoveCapture}
+          onTouchEndCapture={onTouchEndCapture}
+          onTouchCancelCapture={onTouchCancelCapture}
+          onDragOverCapture={onMouseDragOverCapture}
+        >
           {list.map((todo) => {
             const isDragging = dragId === todo.id;
             return (
@@ -1113,10 +1137,6 @@ export default function TableTodoShop({ todos }: Props) {
                 onDragLeave={clearShadow}
                 onDragEnd={onRowDragEnd}
                 onDrop={onRowDrop}
-                onTouchMoveCapture={onTouchMoveCapture}
-                onTouchEndCapture={onTouchEndCapture}
-                onTouchCancelCapture={onTouchCancelCapture}
-                onDragOverCapture={onMouseDragOverCapture}
                 // ВАЖНО: убрали overflowY: "auto"
                 style={{ touchAction: "pan-y" }} // overflowY по месту
                 className={[
@@ -1677,32 +1697,6 @@ export const {
       return true;
     },
 
-    // получаем userId (пользователь точно есть в БД)
-    // async jwt({ token, user, account }) {
-    //   // При первом входе через Credentials
-    //   if (user?.id) {
-    //     token.userId = user.id;
-    //     console.log("JWT: userId from Credentials:", user.id);
-    //   }
-
-    //   // При первом входе через Google или при обновлении токена
-    //   if (!token.userId && token.email) {
-    //     const dbUser = await getUser(token.email);
-    //     if (dbUser) {
-    //       token.userId = dbUser.id;
-    //       console.log(
-    //         "JWT: userId from DB:",
-    //         dbUser.id,
-    //         "for email:",
-    //         token.email
-    //       );
-    //     } else {
-    //       console.error("❌ JWT: No user found in DB for email:", token.email);
-    //     }
-    //   }
-
-    //   return token as JWT & { userId?: string };
-    // },
     async jwt({ token, user, account }) {
       // Для Credentials берем id напрямую (это уже наш DB id)
       if (user?.id && account?.provider === "credentials") {
