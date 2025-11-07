@@ -12,7 +12,6 @@ export async function fetchTodo() {
   console.log("   Session:", JSON.stringify(session, null, 2));
   console.log("   UserId:", userId);
 
-  // if (!userId) return [];
   if (!userId) {
     console.warn("⚠️ No userId in session!");
     return [];
@@ -23,7 +22,7 @@ export async function fetchTodo() {
       SELECT id, title, completed, user_id
       FROM todo_myday
       WHERE user_id = ${userId}
-      ORDER BY sort_order ASC, id ASC
+      ORDER BY completed ASC, sort_order ASC, id ASC
     `;
     console.log(`✅ Found ${todos.length} todos for user ${userId}`);
     return todos;
@@ -52,15 +51,13 @@ export async function fetchTodoById(id: string) {
   }
 }
 
-// ✅ Возвращаем email текущего пользователя (одну строку)
+// Возвращаем email текущего пользователя (одну строку)
 export async function fetchUserEmail(): Promise<string | null> {
   try {
     const session = await auth();
-    // // Можно взять прямо из сессии, если она надежно содержит email:
     const sessionEmail = session?.user?.email ?? null;
     if (sessionEmail) return sessionEmail;
 
-    // Или запасной вариант — по id из БД:
     const userId = session?.user?.id;
     if (!userId) return null;
 

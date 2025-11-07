@@ -54,7 +54,9 @@ user_id	    uuid
 PRIMARY	id
 INDEX	sort_order, id
 INDEX	user_id
+INDEX	user_id, sort_order, id
 UNIQUE	user_id, sort_order
+
 
 // app/api/auth/[...nextauth]/route.ts ====================================================================
 export { GET, POST } from "@/auth";
@@ -308,13 +310,47 @@ export async function toggleTodo(id: string) {
   const userId = session?.user?.id;
   if (!userId) throw new Error("Unauthorized");
 
-  await sql`
-    UPDATE todo_myday
-    SET completed = NOT completed
+  // Получаем текущий статус задачи
+  const [current] = await sql<{ completed: boolean }[]>`
+    SELECT completed FROM todo_myday 
     WHERE id = ${id} AND user_id = ${userId}
   `;
+
+  if (!current) throw new Error("Task not found");
+
+  const willBeCompleted = !current.completed;
+
+  // Получаем максимальный sort_order для целевой группы (completed или не completed)
+  const [maxOrder] = await sql<{ max_order: number | null }[]>`
+    SELECT MAX(sort_order) as max_order
+    FROM todo_myday
+    WHERE user_id = ${userId} AND completed = ${willBeCompleted}
+  `;
+
+  const newSortOrder = (maxOrder?.max_order ?? 0) + 1;
+
+  // Обновляем статус и sort_order
+  await sql`
+    UPDATE todo_myday
+    SET completed = ${willBeCompleted}, sort_order = ${newSortOrder}
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+
   revalidatePath("/dashboard/todo");
 }
+
+// export async function toggleTodo(id: string) {
+//   const session = await auth();
+//   const userId = session?.user?.id;
+//   if (!userId) throw new Error("Unauthorized");
+
+//   await sql`
+//     UPDATE todo_myday
+//     SET completed = NOT completed
+//     WHERE id = ${id} AND user_id = ${userId}
+//   `;
+//   revalidatePath("/dashboard/todo");
+// }
 
 export async function authenticate(
   prevState: string | undefined,
@@ -431,19 +467,28 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 export async function fetchTodo() {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) return [];
+
+  console.log("📋 fetchTodo called");
+  console.log("   Session:", JSON.stringify(session, null, 2));
+  console.log("   UserId:", userId);
+
+  if (!userId) {
+    console.warn("⚠️ No userId in session!");
+    return [];
+  }
 
   try {
     const todos = await sql<Todo[]>`
-      SELECT id, title, completed
+      SELECT id, title, completed, user_id
       FROM todo_myday
       WHERE user_id = ${userId}
-      ORDER BY sort_order ASC, id ASC
-     `;
+      ORDER BY completed ASC, sort_order ASC, id ASC
+    `;
+    console.log(`✅ Found ${todos.length} todos for user ${userId}`);
     return todos;
   } catch (error) {
-    console.log("Database Error:", error);
-    throw new Error("Filed to fetch Todo");
+    console.error("❌ Database Error:", error);
+    throw new Error("Failed to fetch Todo");
   }
 }
 
@@ -466,15 +511,13 @@ export async function fetchTodoById(id: string) {
   }
 }
 
-// ✅ Возвращаем email текущего пользователя (одну строку)
+// Возвращаем email текущего пользователя (одну строку)
 export async function fetchUserEmail(): Promise<string | null> {
   try {
     const session = await auth();
-    // // Можно взять прямо из сессии, если она надежно содержит email:
     const sessionEmail = session?.user?.email ?? null;
     if (sessionEmail) return sessionEmail;
 
-    // Или запасной вариант — по id из БД:
     const userId = session?.user?.id;
     if (!userId) return null;
 
@@ -737,6 +780,10 @@ function getScrollParent(el: HTMLElement | null): HTMLElement {
 export default function TableTodoShop({ todos }: Props) {
   // Состояние для списка задач.
   const [list, setList] = useState<Todo[]>(todos);
+
+  // разделитель задач
+  const incompleteTodos = list.filter((t) => !t.completed);
+  const completedTodos = list.filter((t) => t.completed);
 
   // хранить снимок для отката
   const snapshotRef = useRef<Todo[] | null>(null);
@@ -1126,7 +1173,8 @@ export default function TableTodoShop({ todos }: Props) {
           onTouchCancelCapture={onTouchCancelCapture}
           onDragOverCapture={onMouseDragOverCapture}
         >
-          {list.map((todo) => {
+          {/* Невыполненные задачи */}
+          {incompleteTodos.map((todo) => {
             const isDragging = dragId === todo.id;
             return (
               <div
@@ -1166,7 +1214,66 @@ export default function TableTodoShop({ todos }: Props) {
                     onToggle={(next) => handleToggleOptimistic(todo.id, next)}
                   />
                   <UpdateInvoiceTodo id={todo.id} />
-                  {/* <DeleteTodo title={todo.title} /> */}
+                  <DeleteTodo
+                    id={todo.id}
+                    onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
+                    onRevert={revertDelete}
+                  />
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Разделитель (если есть обе группы) */}
+          {incompleteTodos.length > 0 && completedTodos.length > 0 && (
+            <div className="flex items-center my-4">
+              <div className="flex-grow border-t-2 border-gray-400"></div>
+              <span className="px-3 text-sm text-gray-600">Выполнено</span>
+              <div className="flex-grow border-t-2 border-gray-400"></div>
+            </div>
+          )}
+
+          {/* Выполненные задачи */}
+          {completedTodos.map((todo) => {
+            const isDragging = dragId === todo.id;
+            return (
+              <div
+                key={todo.id}
+                data-id={todo.id}
+                // ВАЖНО: строка НЕ draggable
+                onDragOver={onRowDragOver}
+                onDragLeave={clearShadow}
+                onDragEnd={onRowDragEnd}
+                onDrop={onRowDrop}
+                // ВАЖНО: убрали overflowY: "auto"
+                style={{ touchAction: "pan-y" }} // overflowY по месту
+                className={[
+                  `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
+                  ${todo.completed ? "opacity-40" : ""}`,
+                  isDragging ? "opacity-0" : "",
+                ].join(" ")}
+              >
+                {/* Ручка DnD: ТОЛЬКО тут можно начать перетаскивать */}
+                <button
+                  type="button"
+                  aria-label="Перетащить"
+                  className="p-1 cursor-grab active:cursor-grabbing touch-none border-gray-500 border-2 rounded hover:border-gray-800 m-1"
+                  draggable
+                  onDragStart={(e) => onHandleDragStart(e, todo.id)}
+                  onTouchStart={(e) => onHandleTouchStart(e, todo.id)}
+                >
+                  <TbArrowsUpDown className="w-5 h-5 " />
+                </button>
+
+                <div className="w-full ml-2 select-text">{todo.title}</div>
+
+                <div className="flex p-1 md:p-1 items-center justify-end">
+                  <CheckboxTodo
+                    id={todo.id}
+                    completed={todo.completed}
+                    onToggle={(next) => handleToggleOptimistic(todo.id, next)}
+                  />
+                  <UpdateInvoiceTodo id={todo.id} />
                   <DeleteTodo
                     id={todo.id}
                     onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
