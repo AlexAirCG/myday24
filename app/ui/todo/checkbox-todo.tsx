@@ -11,7 +11,7 @@ export function CheckboxTodo({ completed, onToggle }: Props) {
     <button
       type="button"
       onClick={() => onToggle?.(!completed)}
-      className={`p-1 mr-1 border-2 rounded cursor-pointer active:bg-green-700 transition-colors duration-150 ease-out ${
+      className={`p-1 m-1 border-2 rounded cursor-pointer active:bg-green-700 transition-colors duration-150 ease-out ${
         completed
           ? "border-green-700 bg-green-50"
           : "border-gray-500 hover:border-green-700"
