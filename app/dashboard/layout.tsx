@@ -1,6 +1,8 @@
 import { fetchUserEmail } from "../lib/data";
 import SideNav from "../ui/dashboard/sidenav";
 
+export const dynamic = "force-dynamic";
+
 export default async function Layout({
   children,
 }: {
