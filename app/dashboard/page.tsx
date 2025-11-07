@@ -5,6 +5,8 @@ import { CiBatteryEmpty, CiBatteryFull } from "react-icons/ci";
 import { TbAccessPoint } from "react-icons/tb";
 import { TbAccessPointOff } from "react-icons/tb";
 
+export const dynamic = "force-dynamic";
+
 export default function Page() {
   const [showPass, setShowPass] = useState(true);
   const [showPower, setShowPower] = useState(true);

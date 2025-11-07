@@ -3,6 +3,8 @@ import { inter } from "@/app/ui/fonts";
 import TableTodoShop from "@/app/ui/shop/table-todo-shop";
 import CreateTodo from "@/app/ui/todo/create-todo";
 
+export const dynamic = "force-dynamic";
+
 export default async function Page() {
   const todos = await fetchTodo();
   return (
