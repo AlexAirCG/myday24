@@ -810,31 +810,34 @@ export default function TableTodoShop({ todos }: Props) {
   }
 
   async function handleToggleOptimistic(id: string, next: boolean) {
-    // 1. Проверка: игнорировать если уже pending
     if (pendingToggles.has(id)) {
       console.warn(`Toggle already pending for ${id}`);
       return;
     }
 
-    // 2. Добавить в pending
     setPendingToggles((prev) => new Set(prev).add(id));
 
-    // 3. Оптимистичное обновление UI
     setList((prev) =>
       prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
     );
 
     try {
-      // 4. Запрос на сервер
       await toggleTodo(id);
+
+      // ✅ Даем время для получения данных с сервера
+      setTimeout(() => {
+        setPendingToggles((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(id);
+          return newSet;
+        });
+      }, 150); // Небольшая задержка
     } catch (e) {
-      // 5. Откат при ошибке
       console.error("Toggle failed:", e);
       setList((prev) =>
         prev.map((t) => (t.id === id ? { ...t, completed: !next } : t))
       );
-    } finally {
-      // 6. Удалить из pending
+      // При ошибке убираем сразу
       setPendingToggles((prev) => {
         const newSet = new Set(prev);
         newSet.delete(id);
@@ -842,10 +845,41 @@ export default function TableTodoShop({ todos }: Props) {
       });
     }
   }
+  // async function handleToggleOptimistic(id: string, next: boolean) {
+  //   // 1. Проверка: игнорировать если уже pending
+  //   if (pendingToggles.has(id)) {
+  //     console.warn(`Toggle already pending for ${id}`);
+  //     return;
+  //   }
 
-  // Умная синхронизация
+  //   // 2. Добавить в pending
+  //   setPendingToggles((prev) => new Set(prev).add(id));
+
+  //   // 3. Оптимистичное обновление UI
+  //   setList((prev) =>
+  //     prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
+  //   );
+
+  //   try {
+  //     // 4. Запрос на сервер
+  //     await toggleTodo(id);
+  //   } catch (e) {
+  //     // 5. Откат при ошибке
+  //     console.error("Toggle failed:", e);
+  //     setList((prev) =>
+  //       prev.map((t) => (t.id === id ? { ...t, completed: !next } : t))
+  //     );
+  //   } finally {
+  //     // 6. Удалить из pending
+  //     setPendingToggles((prev) => {
+  //       const newSet = new Set(prev);
+  //       newSet.delete(id);
+  //       return newSet;
+  //     });
+  //   }
+  // }
+
   useEffect(() => {
-    // Блокируем ТОЛЬКО при перетаскивании
     if (dragId) return;
 
     const prev = prevIdsRef.current;
@@ -855,17 +889,15 @@ export default function TableTodoShop({ todos }: Props) {
     prevIdsRef.current = nextSet;
 
     setList((prevList) => {
-      // Проверка структурных изменений (добавление/удаление)
       const hasStructuralChanges =
         todos.length !== prevList.length ||
         todos.some((t) => !prevList.find((p) => p.id === t.id)) ||
         prevList.some((p) => !todos.find((t) => t.id === p.id));
 
       if (hasStructuralChanges) {
-        // Обновляем список, НО сохраняем оптимистичное состояние для pending задач
         return todos.map((todo) => {
+          // ✅ pendingToggles доступен через замыкание
           if (pendingToggles.has(todo.id)) {
-            // Для pending задач берем значение из prevList (оптимистичное)
             const pendingTodo = prevList.find((t) => t.id === todo.id);
             return pendingTodo || todo;
           }
@@ -873,11 +905,8 @@ export default function TableTodoShop({ todos }: Props) {
         });
       }
 
-      // Проверка изменений данных (исключая pending задачи)
       const hasDataChanges = todos.some((todo) => {
-        // Пропускаем pending задачи при проверке
         if (pendingToggles.has(todo.id)) return false;
-
         const prevTodo = prevList.find((t) => t.id === todo.id);
         return (
           prevTodo &&
@@ -887,7 +916,6 @@ export default function TableTodoShop({ todos }: Props) {
       });
 
       if (hasDataChanges) {
-        // Аналогично: сохраняем оптимистичное состояние для pending
         return todos.map((todo) => {
           if (pendingToggles.has(todo.id)) {
             const pendingTodo = prevList.find((t) => t.id === todo.id);
@@ -901,7 +929,66 @@ export default function TableTodoShop({ todos }: Props) {
     });
 
     lastCreatedIdRef.current = newTodo?.id ?? null;
-  }, [todos, dragId, pendingToggles]);
+  }, [todos, dragId]);
+  // Умная синхронизация
+  // useEffect(() => {
+  //   // Блокируем ТОЛЬКО при перетаскивании
+  //   if (dragId) return;
+
+  //   const prev = prevIdsRef.current;
+  //   const nextSet = new Set(todos.map((t) => t.id));
+  //   const newTodo = todos.find((t) => !prev.has(t.id)) || null;
+
+  //   prevIdsRef.current = nextSet;
+
+  //   setList((prevList) => {
+  //     // Проверка структурных изменений (добавление/удаление)
+  //     const hasStructuralChanges =
+  //       todos.length !== prevList.length ||
+  //       todos.some((t) => !prevList.find((p) => p.id === t.id)) ||
+  //       prevList.some((p) => !todos.find((t) => t.id === p.id));
+
+  //     if (hasStructuralChanges) {
+  //       // Обновляем список, НО сохраняем оптимистичное состояние для pending задач
+  //       return todos.map((todo) => {
+  //         if (pendingToggles.has(todo.id)) {
+  //           // Для pending задач берем значение из prevList (оптимистичное)
+  //           const pendingTodo = prevList.find((t) => t.id === todo.id);
+  //           return pendingTodo || todo;
+  //         }
+  //         return todo;
+  //       });
+  //     }
+
+  //     // Проверка изменений данных (исключая pending задачи)
+  //     const hasDataChanges = todos.some((todo) => {
+  //       // Пропускаем pending задачи при проверке
+  //       if (pendingToggles.has(todo.id)) return false;
+
+  //       const prevTodo = prevList.find((t) => t.id === todo.id);
+  //       return (
+  //         prevTodo &&
+  //         (prevTodo.completed !== todo.completed ||
+  //           prevTodo.title !== todo.title)
+  //       );
+  //     });
+
+  //     if (hasDataChanges) {
+  //       // Аналогично: сохраняем оптимистичное состояние для pending
+  //       return todos.map((todo) => {
+  //         if (pendingToggles.has(todo.id)) {
+  //           const pendingTodo = prevList.find((t) => t.id === todo.id);
+  //           return pendingTodo || todo;
+  //         }
+  //         return todo;
+  //       });
+  //     }
+
+  //     return prevList;
+  //   });
+
+  //   lastCreatedIdRef.current = newTodo?.id ?? null;
+  // }, [todos, dragId, pendingToggles]);
 
   // 2) Скроллим ПОСЛЕ того, как DOM обновился
   useLayoutEffect(() => {
@@ -1367,6 +1454,7 @@ export default function TableTodoShop({ todos }: Props) {
 }
 
 // app/ui/todo/checkbox-todo.tsx ====================================================================
+import React from "react";
 import { GiCheckMark } from "react-icons/gi";
 
 type Props = {
@@ -1375,23 +1463,26 @@ type Props = {
   onToggle?: (next: boolean) => void;
 };
 
-export function CheckboxTodo({ completed, onToggle }: Props) {
+export const CheckboxTodo = React.memo(function CheckboxTodo({
+  id,
+  completed,
+  onToggle,
+}: Props) {
+  const handleClick = React.useCallback(() => {
+    onToggle?.(!completed);
+  }, [completed, onToggle]);
+
   return (
     <button
       type="button"
-      onClick={() => onToggle?.(!completed)}
-      className={`p-1 m-1 border-2 rounded cursor-pointer active:bg-green-700 transition-colors duration-150 ease-out ${
+      onClick={handleClick}
+      className={`p-1 m-1 border-2 rounded cursor-pointer transition-colors duration-150 ease-out ${
         completed
           ? "border-green-700 bg-green-50"
           : "border-gray-500 hover:border-green-700"
       }`}
       aria-pressed={completed}
-      aria-label={
-        completed ? "Снять отметку о выполнении" : "Отметить как выполнено"
-      }
-      title={
-        completed ? "Снять отметку о выполнении" : "Отметить как выполнено"
-      }
+      disabled={false} // Можно добавить disabled во время pending
     >
       <GiCheckMark
         className={`w-5 h-5 ${
@@ -1400,8 +1491,7 @@ export function CheckboxTodo({ completed, onToggle }: Props) {
       />
     </button>
   );
-}
-
+});
 
 // app/ui/login-form.tsx ============================================================================
 "use client";
