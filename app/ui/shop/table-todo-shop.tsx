@@ -69,6 +69,10 @@ export default function TableTodoShop({ todos }: Props) {
   // Состояние для списка задач.
   const [list, setList] = useState<Todo[]>(todos);
 
+  // разделитель задач
+  const incompleteTodos = list.filter((t) => !t.completed);
+  const completedTodos = list.filter((t) => t.completed);
+
   // хранить снимок для отката
   const snapshotRef = useRef<Todo[] | null>(null);
 
@@ -457,7 +461,8 @@ export default function TableTodoShop({ todos }: Props) {
           onTouchCancelCapture={onTouchCancelCapture}
           onDragOverCapture={onMouseDragOverCapture}
         >
-          {list.map((todo) => {
+          {/* Невыполненные задачи */}
+          {incompleteTodos.map((todo) => {
             const isDragging = dragId === todo.id;
             return (
               <div
@@ -497,7 +502,66 @@ export default function TableTodoShop({ todos }: Props) {
                     onToggle={(next) => handleToggleOptimistic(todo.id, next)}
                   />
                   <UpdateInvoiceTodo id={todo.id} />
-                  {/* <DeleteTodo title={todo.title} /> */}
+                  <DeleteTodo
+                    id={todo.id}
+                    onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
+                    onRevert={revertDelete}
+                  />
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Разделитель (если есть обе группы) */}
+          {incompleteTodos.length > 0 && completedTodos.length > 0 && (
+            <div className="flex items-center my-4">
+              <div className="flex-grow border-t-2 border-gray-400"></div>
+              <span className="px-3 text-sm text-gray-600">Выполнено</span>
+              <div className="flex-grow border-t-2 border-gray-400"></div>
+            </div>
+          )}
+
+          {/* Выполненные задачи */}
+          {completedTodos.map((todo) => {
+            const isDragging = dragId === todo.id;
+            return (
+              <div
+                key={todo.id}
+                data-id={todo.id}
+                // ВАЖНО: строка НЕ draggable
+                onDragOver={onRowDragOver}
+                onDragLeave={clearShadow}
+                onDragEnd={onRowDragEnd}
+                onDrop={onRowDrop}
+                // ВАЖНО: убрали overflowY: "auto"
+                style={{ touchAction: "pan-y" }} // overflowY по месту
+                className={[
+                  `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
+                  ${todo.completed ? "opacity-40" : ""}`,
+                  isDragging ? "opacity-0" : "",
+                ].join(" ")}
+              >
+                {/* Ручка DnD: ТОЛЬКО тут можно начать перетаскивать */}
+                <button
+                  type="button"
+                  aria-label="Перетащить"
+                  className="p-1 cursor-grab active:cursor-grabbing touch-none border-gray-500 border-2 rounded hover:border-gray-800 m-1"
+                  draggable
+                  onDragStart={(e) => onHandleDragStart(e, todo.id)}
+                  onTouchStart={(e) => onHandleTouchStart(e, todo.id)}
+                >
+                  <TbArrowsUpDown className="w-5 h-5 " />
+                </button>
+
+                <div className="w-full ml-2 select-text">{todo.title}</div>
+
+                <div className="flex p-1 md:p-1 items-center justify-end">
+                  <CheckboxTodo
+                    id={todo.id}
+                    completed={todo.completed}
+                    onToggle={(next) => handleToggleOptimistic(todo.id, next)}
+                  />
+                  <UpdateInvoiceTodo id={todo.id} />
                   <DeleteTodo
                     id={todo.id}
                     onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}

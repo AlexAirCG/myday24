@@ -87,13 +87,47 @@ export async function toggleTodo(id: string) {
   const userId = session?.user?.id;
   if (!userId) throw new Error("Unauthorized");
 
-  await sql`
-    UPDATE todo_myday
-    SET completed = NOT completed
+  // Получаем текущий статус задачи
+  const [current] = await sql<{ completed: boolean }[]>`
+    SELECT completed FROM todo_myday 
     WHERE id = ${id} AND user_id = ${userId}
   `;
+
+  if (!current) throw new Error("Task not found");
+
+  const willBeCompleted = !current.completed;
+
+  // Получаем максимальный sort_order для целевой группы (completed или не completed)
+  const [maxOrder] = await sql<{ max_order: number | null }[]>`
+    SELECT MAX(sort_order) as max_order
+    FROM todo_myday
+    WHERE user_id = ${userId} AND completed = ${willBeCompleted}
+  `;
+
+  const newSortOrder = (maxOrder?.max_order ?? 0) + 1;
+
+  // Обновляем статус и sort_order
+  await sql`
+    UPDATE todo_myday
+    SET completed = ${willBeCompleted}, sort_order = ${newSortOrder}
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+
   revalidatePath("/dashboard/todo");
 }
+
+// export async function toggleTodo(id: string) {
+//   const session = await auth();
+//   const userId = session?.user?.id;
+//   if (!userId) throw new Error("Unauthorized");
+
+//   await sql`
+//     UPDATE todo_myday
+//     SET completed = NOT completed
+//     WHERE id = ${id} AND user_id = ${userId}
+//   `;
+//   revalidatePath("/dashboard/todo");
+// }
 
 export async function authenticate(
   prevState: string | undefined,
