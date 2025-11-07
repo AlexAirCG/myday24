@@ -66,45 +66,80 @@ function getScrollParent(el: HTMLElement | null): HTMLElement {
 }
 
 export default function TableTodoShop({ todos }: Props) {
-  // Состояние для списка задач.
   const [list, setList] = useState<Todo[]>(todos);
 
-  // разделитель задач
+  // Идентификатор текущей перетаскиваемой задачи.
+  const [dragId, setDragId] = useState<string | null>(null);
+  // Идентификатор задачи, на которую наведена перетаскиваемая.
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  // Координаты касания для мобильных устройств.
+  const [touchXY, setTouchXY] = useState<{ x: number; y: number } | null>(null);
+  // Смещение курсора относительно элемента.
+  const [dragOffset, setDragOffset] = useState<{
+    dx: number;
+    dy: number;
+  } | null>(null);
+  // Размеры перетаскиваемого элемента.
+  const [dragSize, setDragSize] = useState<{ w: number; h: number } | null>(
+    null
+  );
+
+  //фильтрация (использует list)
   const incompleteTodos = list.filter((t) => !t.completed);
   const completedTodos = list.filter((t) => t.completed);
 
-  // хранить снимок для отката
+  // Все useRef
   const snapshotRef = useRef<Todo[] | null>(null);
-
-  // отдельный снимок для отката удаления (не мешаем DnD-снапшоту)
   const deleteSnapshotRef = useRef<Todo[] | null>(null);
-
-  // подсветка последней задачи
   const prevIdsRef = useRef<Set<string>>(new Set(todos.map((t) => t.id)));
   const lastCreatedIdRef = useRef<string | null>(null);
+  // глобальные обработчики touch-перетаскивания во время активного dnd
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Хранилище клона для мыши
+  const dragImageRef = useRef<HTMLElement | null>(null);
+  const lastAutoScroll = useRef<number>(0);
 
+  // ✅ 4. Функции-хелперы
   function flashRow(el: HTMLElement) {
     el.classList.add("ring-2", "ring-emerald-400", "animate-pulse");
     setTimeout(() => {
       el.classList.remove("ring-2", "ring-emerald-400", "animate-pulse");
     }, 500);
   }
-
-  // 1) Один эффект: синхронизируем список и фиксируем id новой задачи
+  // Умная синхронизация
   useEffect(() => {
-    // находим новый id (которого раньше не было)
+    if (dragId) return; // ✅ dragId уже объявлен выше
+
     const prev = prevIdsRef.current;
     const nextSet = new Set(todos.map((t) => t.id));
     const newTodo = todos.find((t) => !prev.has(t.id)) || null;
 
     prevIdsRef.current = nextSet;
 
-    // обновляем локальный список
-    setList(todos);
+    setList((prevList) => {
+      const hasStructuralChanges =
+        todos.length !== prevList.length ||
+        todos.some((t) => !prevList.find((p) => p.id === t.id)) ||
+        prevList.some((p) => !todos.find((t) => t.id === p.id));
 
-    // запоминаем для скролла после коммита
+      if (hasStructuralChanges) {
+        return todos;
+      }
+
+      const hasDataChanges = todos.some((todo) => {
+        const prevTodo = prevList.find((t) => t.id === todo.id);
+        return (
+          prevTodo &&
+          (prevTodo.completed !== todo.completed ||
+            prevTodo.title !== todo.title)
+        );
+      });
+
+      return hasDataChanges ? todos : prevList;
+    });
+
     lastCreatedIdRef.current = newTodo?.id ?? null;
-  }, [todos]);
+  }, [todos, dragId]);
 
   // 2) Скроллим ПОСЛЕ того, как DOM обновился
   useLayoutEffect(() => {
@@ -137,25 +172,6 @@ export default function TableTodoShop({ todos }: Props) {
     // Ждём кадр после коммита и пробуем
     requestAnimationFrame(tryScroll);
   }, [list.length]);
-
-  // DnD state
-  // Идентификатор текущей перетаскиваемой задачи.
-  const [dragId, setDragId] = useState<string | null>(null);
-  // Идентификатор задачи, на которую наведена перетаскиваемая.
-  const [hoverId, setHoverId] = useState<string | null>(null);
-
-  // Touch preview state
-  // Координаты касания для мобильных устройств.
-  const [touchXY, setTouchXY] = useState<{ x: number; y: number } | null>(null);
-  // Смещение курсора относительно элемента.
-  const [dragOffset, setDragOffset] = useState<{
-    dx: number;
-    dy: number;
-  } | null>(null);
-  // Размеры перетаскиваемого элемента.
-  const [dragSize, setDragSize] = useState<{ w: number; h: number } | null>(
-    null
-  );
 
   // Обработчик для события перетаскивания с помощью мыши. Он предотвращает стандартное поведение и обновляет состояние списка задач, чтобы переместить задачу.
   const onMouseDragOverCapture = (e: React.DragEvent<HTMLDivElement>) => {
@@ -202,7 +218,7 @@ export default function TableTodoShop({ todos }: Props) {
   };
 
   // Функции автоскроллинга
-  const lastAutoScroll = useRef<number>(0);
+  // const lastAutoScroll = useRef<number>(0);
   function autoScrollIfNearEdgeXY(
     container: HTMLElement,
     x: number,
@@ -264,8 +280,6 @@ export default function TableTodoShop({ todos }: Props) {
     (e.currentTarget as HTMLElement).style.boxShadow = "";
   };
 
-  // Хранилище клона для мыши
-  const dragImageRef = useRef<HTMLElement | null>(null);
   // Обработчик события начала перетаскивания. Создаёт "призрак" элемента (внешний вид клонированного элемента), который будет перемещаться по экрану при перетаскивании.
   const onHandleDragStart = (
     e: React.DragEvent<HTMLButtonElement>,
@@ -362,9 +376,6 @@ export default function TableTodoShop({ todos }: Props) {
     setDragSize({ w: rect.width, h: rect.height });
     setHoverId(id);
   };
-
-  // глобальные обработчики touch-перетаскивания во время активного dnd
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const onTouchMoveCapture = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!dragId) return;
@@ -481,32 +492,32 @@ export default function TableTodoShop({ todos }: Props) {
                   isDragging ? "opacity-0" : "",
                 ].join(" ")}
               >
-                {/* Ручка DnD: ТОЛЬКО тут можно начать перетаскивать */}
-                <button
-                  type="button"
-                  aria-label="Перетащить"
-                  className="p-1 cursor-grab active:cursor-grabbing touch-none border-gray-500 border-2 rounded hover:border-gray-800 m-1"
-                  draggable
-                  onDragStart={(e) => onHandleDragStart(e, todo.id)}
-                  onTouchStart={(e) => onHandleTouchStart(e, todo.id)}
-                >
-                  <TbArrowsUpDown className="w-5 h-5 " />
-                </button>
+                <CheckboxTodo
+                  id={todo.id}
+                  completed={todo.completed}
+                  onToggle={(next) => handleToggleOptimistic(todo.id, next)}
+                />
 
                 <div className="w-full ml-2 select-text">{todo.title}</div>
 
-                <div className="flex p-1 md:p-1 items-center justify-end">
-                  <CheckboxTodo
-                    id={todo.id}
-                    completed={todo.completed}
-                    onToggle={(next) => handleToggleOptimistic(todo.id, next)}
-                  />
+                <div className="flex p-1 md:p-1 items-center justify-center gap-1">
                   <UpdateInvoiceTodo id={todo.id} />
                   <DeleteTodo
                     id={todo.id}
                     onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
                     onRevert={revertDelete}
                   />
+                  {/* Ручка DnD: ТОЛЬКО тут можно начать перетаскивать */}
+                  <button
+                    type="button"
+                    aria-label="Перетащить"
+                    className="p-1 cursor-grab active:cursor-grabbing touch-none border-gray-500 border-2 rounded hover:border-gray-800"
+                    draggable
+                    onDragStart={(e) => onHandleDragStart(e, todo.id)}
+                    onTouchStart={(e) => onHandleTouchStart(e, todo.id)}
+                  >
+                    <TbArrowsUpDown className="w-5 h-5 " />
+                  </button>
                 </div>
               </div>
             );
