@@ -784,6 +784,9 @@ export default function TableTodoShop({ todos }: Props) {
   );
   const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
 
+  // анимация сделанной задачи
+  const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
+
   //фильтрация (использует list)
   const incompleteTodos = list.filter((t) => !t.completed);
   const completedTodos = list.filter((t) => t.completed);
@@ -808,7 +811,6 @@ export default function TableTodoShop({ todos }: Props) {
       el.classList.remove("ring-2", "ring-emerald-400", "animate-pulse");
     }, 500);
   }
-
   async function handleToggleOptimistic(id: string, next: boolean) {
     if (pendingToggles.has(id)) {
       console.warn(`Toggle already pending for ${id}`);
@@ -817,67 +819,60 @@ export default function TableTodoShop({ todos }: Props) {
 
     setPendingToggles((prev) => new Set(prev).add(id));
 
-    setList((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
-    );
+    // Если задача становится выполненной - запускаем анимацию
+    if (next) {
+      setAnimatingIds((prev) => new Set(prev).add(id));
+
+      // Ждём завершения анимации перед обновлением состояния
+      setTimeout(() => {
+        setList((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
+        );
+
+        // Убираем из анимации после обновления
+        setTimeout(() => {
+          setAnimatingIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(id);
+            return newSet;
+          });
+        }, 50);
+      }, 300); // Длительность анимации
+    } else {
+      // Если снимаем галочку - без анимации
+      setList((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
+      );
+    }
 
     try {
       await toggleTodo(id);
 
-      // ✅ Даем время для получения данных с сервера
       setTimeout(() => {
         setPendingToggles((prev) => {
           const newSet = new Set(prev);
           newSet.delete(id);
           return newSet;
         });
-      }, 150); // Небольшая задержка
+      }, 150);
     } catch (e) {
       console.error("Toggle failed:", e);
+      // Откат при ошибке
       setList((prev) =>
         prev.map((t) => (t.id === id ? { ...t, completed: !next } : t))
       );
-      // При ошибке убираем сразу
       setPendingToggles((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+      setAnimatingIds((prev) => {
         const newSet = new Set(prev);
         newSet.delete(id);
         return newSet;
       });
     }
   }
-  // async function handleToggleOptimistic(id: string, next: boolean) {
-  //   // 1. Проверка: игнорировать если уже pending
-  //   if (pendingToggles.has(id)) {
-  //     console.warn(`Toggle already pending for ${id}`);
-  //     return;
-  //   }
-
-  //   // 2. Добавить в pending
-  //   setPendingToggles((prev) => new Set(prev).add(id));
-
-  //   // 3. Оптимистичное обновление UI
-  //   setList((prev) =>
-  //     prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
-  //   );
-
-  //   try {
-  //     // 4. Запрос на сервер
-  //     await toggleTodo(id);
-  //   } catch (e) {
-  //     // 5. Откат при ошибке
-  //     console.error("Toggle failed:", e);
-  //     setList((prev) =>
-  //       prev.map((t) => (t.id === id ? { ...t, completed: !next } : t))
-  //     );
-  //   } finally {
-  //     // 6. Удалить из pending
-  //     setPendingToggles((prev) => {
-  //       const newSet = new Set(prev);
-  //       newSet.delete(id);
-  //       return newSet;
-  //     });
-  //   }
-  // }
 
   useEffect(() => {
     if (dragId) return;
@@ -930,65 +925,6 @@ export default function TableTodoShop({ todos }: Props) {
 
     lastCreatedIdRef.current = newTodo?.id ?? null;
   }, [todos, dragId]);
-  // Умная синхронизация
-  // useEffect(() => {
-  //   // Блокируем ТОЛЬКО при перетаскивании
-  //   if (dragId) return;
-
-  //   const prev = prevIdsRef.current;
-  //   const nextSet = new Set(todos.map((t) => t.id));
-  //   const newTodo = todos.find((t) => !prev.has(t.id)) || null;
-
-  //   prevIdsRef.current = nextSet;
-
-  //   setList((prevList) => {
-  //     // Проверка структурных изменений (добавление/удаление)
-  //     const hasStructuralChanges =
-  //       todos.length !== prevList.length ||
-  //       todos.some((t) => !prevList.find((p) => p.id === t.id)) ||
-  //       prevList.some((p) => !todos.find((t) => t.id === p.id));
-
-  //     if (hasStructuralChanges) {
-  //       // Обновляем список, НО сохраняем оптимистичное состояние для pending задач
-  //       return todos.map((todo) => {
-  //         if (pendingToggles.has(todo.id)) {
-  //           // Для pending задач берем значение из prevList (оптимистичное)
-  //           const pendingTodo = prevList.find((t) => t.id === todo.id);
-  //           return pendingTodo || todo;
-  //         }
-  //         return todo;
-  //       });
-  //     }
-
-  //     // Проверка изменений данных (исключая pending задачи)
-  //     const hasDataChanges = todos.some((todo) => {
-  //       // Пропускаем pending задачи при проверке
-  //       if (pendingToggles.has(todo.id)) return false;
-
-  //       const prevTodo = prevList.find((t) => t.id === todo.id);
-  //       return (
-  //         prevTodo &&
-  //         (prevTodo.completed !== todo.completed ||
-  //           prevTodo.title !== todo.title)
-  //       );
-  //     });
-
-  //     if (hasDataChanges) {
-  //       // Аналогично: сохраняем оптимистичное состояние для pending
-  //       return todos.map((todo) => {
-  //         if (pendingToggles.has(todo.id)) {
-  //           const pendingTodo = prevList.find((t) => t.id === todo.id);
-  //           return pendingTodo || todo;
-  //         }
-  //         return todo;
-  //       });
-  //     }
-
-  //     return prevList;
-  //   });
-
-  //   lastCreatedIdRef.current = newTodo?.id ?? null;
-  // }, [todos, dragId, pendingToggles]);
 
   // 2) Скроллим ПОСЛЕ того, как DOM обновился
   useLayoutEffect(() => {
@@ -1306,6 +1242,7 @@ export default function TableTodoShop({ todos }: Props) {
           {/* Невыполненные задачи */}
           {incompleteTodos.map((todo) => {
             const isDragging = dragId === todo.id;
+            const isAnimating = animatingIds.has(todo.id);
             return (
               <div
                 key={todo.id}
@@ -1321,6 +1258,7 @@ export default function TableTodoShop({ todos }: Props) {
                   `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
                   ${todo.completed ? "opacity-40" : ""}`,
                   isDragging ? "opacity-0" : "",
+                  isAnimating ? "animate-slide-down-fade" : "transition-shadow",
                 ].join(" ")}
               >
                 <CheckboxTodo
@@ -1379,7 +1317,7 @@ export default function TableTodoShop({ todos }: Props) {
                 style={{ touchAction: "pan-y" }} // overflowY по месту
                 className={[
                   `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
-                  ${todo.completed ? "opacity-40" : ""}`,
+                  ${todo.completed ? "opacity-70" : ""}`,
                   isDragging ? "opacity-0" : "",
                 ].join(" ")}
               >
