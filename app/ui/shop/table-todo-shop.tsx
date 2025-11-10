@@ -85,8 +85,10 @@ export default function TableTodoShop({ todos }: Props) {
   );
   const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
 
-  // анимация сделанной задачи
-  const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
+  // анимация улетания невыполненной задачи
+  const [animatingDown, setAnimatingDown] = useState<Set<string>>(new Set());
+  // анимация улетания выполненной задачи
+  const [animatingUp, setAnimatingUp] = useState<Set<string>>(new Set());
 
   //фильтрация (использует list)
   const incompleteTodos = list.filter((t) => !t.completed);
@@ -120,30 +122,40 @@ export default function TableTodoShop({ todos }: Props) {
 
     setPendingToggles((prev) => new Set(prev).add(id));
 
-    // Если задача становится выполненной - запускаем анимацию
     if (next) {
-      setAnimatingIds((prev) => new Set(prev).add(id));
+      // Задача становится выполненной - анимация вниз
+      setAnimatingDown((prev) => new Set(prev).add(id));
 
-      // Ждём завершения анимации перед обновлением состояния
       setTimeout(() => {
         setList((prev) =>
           prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
         );
 
-        // Убираем из анимации после обновления
         setTimeout(() => {
-          setAnimatingIds((prev) => {
+          setAnimatingDown((prev) => {
             const newSet = new Set(prev);
             newSet.delete(id);
             return newSet;
           });
         }, 50);
-      }, 300); // Длительность анимации
+      }, 600);
     } else {
-      // Если снимаем галочку - без анимации
-      setList((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
-      );
+      // Задача становится невыполненной - анимация вверх
+      setAnimatingUp((prev) => new Set(prev).add(id));
+
+      setTimeout(() => {
+        setList((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
+        );
+
+        setTimeout(() => {
+          setAnimatingUp((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(id);
+            return newSet;
+          });
+        }, 50);
+      }, 600);
     }
 
     try {
@@ -158,7 +170,6 @@ export default function TableTodoShop({ todos }: Props) {
       }, 150);
     } catch (e) {
       console.error("Toggle failed:", e);
-      // Откат при ошибке
       setList((prev) =>
         prev.map((t) => (t.id === id ? { ...t, completed: !next } : t))
       );
@@ -167,49 +178,19 @@ export default function TableTodoShop({ todos }: Props) {
         newSet.delete(id);
         return newSet;
       });
-      setAnimatingIds((prev) => {
+      // Убираем анимацию при ошибке
+      setAnimatingDown((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+      setAnimatingUp((prev) => {
         const newSet = new Set(prev);
         newSet.delete(id);
         return newSet;
       });
     }
   }
-  // async function handleToggleOptimistic(id: string, next: boolean) {
-  //   if (pendingToggles.has(id)) {
-  //     console.warn(`Toggle already pending for ${id}`);
-  //     return;
-  //   }
-
-  //   setPendingToggles((prev) => new Set(prev).add(id));
-
-  //   setList((prev) =>
-  //     prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
-  //   );
-
-  //   try {
-  //     await toggleTodo(id);
-
-  //     // ✅ Даем время для получения данных с сервера
-  //     setTimeout(() => {
-  //       setPendingToggles((prev) => {
-  //         const newSet = new Set(prev);
-  //         newSet.delete(id);
-  //         return newSet;
-  //       });
-  //     }, 150); // Небольшая задержка
-  //   } catch (e) {
-  //     console.error("Toggle failed:", e);
-  //     setList((prev) =>
-  //       prev.map((t) => (t.id === id ? { ...t, completed: !next } : t))
-  //     );
-  //     // При ошибке убираем сразу
-  //     setPendingToggles((prev) => {
-  //       const newSet = new Set(prev);
-  //       newSet.delete(id);
-  //       return newSet;
-  //     });
-  //   }
-  // }
 
   useEffect(() => {
     if (dragId) return;
@@ -579,7 +560,7 @@ export default function TableTodoShop({ todos }: Props) {
           {/* Невыполненные задачи */}
           {incompleteTodos.map((todo) => {
             const isDragging = dragId === todo.id;
-            const isAnimating = animatingIds.has(todo.id);
+            const isAnimatingDown = animatingDown.has(todo.id);
             return (
               <div
                 key={todo.id}
@@ -595,7 +576,7 @@ export default function TableTodoShop({ todos }: Props) {
                   `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
                   ${todo.completed ? "opacity-40" : ""}`,
                   isDragging ? "opacity-0" : "",
-                  isAnimating ? "animate-slide-down-fade" : "transition-shadow",
+                  isAnimatingDown ? "animate-slide-down-fade" : "",
                 ].join(" ")}
               >
                 <CheckboxTodo
@@ -641,6 +622,7 @@ export default function TableTodoShop({ todos }: Props) {
           {/* Выполненные задачи */}
           {completedTodos.map((todo) => {
             const isDragging = dragId === todo.id;
+            const isAnimatingUp = animatingUp.has(todo.id);
             return (
               <div
                 key={todo.id}
@@ -654,8 +636,9 @@ export default function TableTodoShop({ todos }: Props) {
                 style={{ touchAction: "pan-y" }} // overflowY по месту
                 className={[
                   `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
-                  ${todo.completed ? "opacity-70" : ""}`,
+                  ${todo.completed ? "opacity-60" : ""}`,
                   isDragging ? "opacity-0" : "",
+                  isAnimatingUp ? "animate-slide-up-fade" : "",
                 ].join(" ")}
               >
                 <CheckboxTodo
