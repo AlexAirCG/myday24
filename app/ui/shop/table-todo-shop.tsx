@@ -138,24 +138,32 @@ export default function TableTodoShop({ todos }: Props) {
             return newSet;
           });
         }, 50);
-      }, 600);
+      }, 300);
     } else {
-      // Задача становится невыполненной - анимация вверх
+      // Задача становится невыполненной - анимация вверх + перенос в самый верх локально
       setAnimatingUp((prev) => new Set(prev).add(id));
 
       setTimeout(() => {
-        setList((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, completed: next } : t))
-        );
+        setList((prev) => {
+          const from = prev.findIndex((t) => t.id === id);
+          if (from === -1) return prev;
+
+          // обновляем completed=false и переносим на индекс 0
+          const updated = { ...prev[from], completed: false };
+          const copy = [...prev];
+          copy.splice(from, 1);
+          copy.splice(0, 0, updated);
+          return copy;
+        });
 
         setTimeout(() => {
           setAnimatingUp((prev) => {
-            const newSet = new Set(prev);
-            newSet.delete(id);
-            return newSet;
+            const nextSet = new Set(prev);
+            nextSet.delete(id);
+            return nextSet;
           });
         }, 50);
-      }, 600);
+      }, 300);
     }
 
     try {

@@ -20,6 +20,7 @@ const DeleteSchema = z.object({
 });
 export type DeleteState = { ok: boolean; id?: string; error?: string };
 
+// Создание задачи - добавляем в НАЧАЛО списка
 export async function createTodoFetch(formData: FormData) {
   const session = await auth();
   const userId = session?.user?.id;
@@ -31,12 +32,19 @@ export async function createTodoFetch(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   if (!title) return;
 
+  // Получаем минимальный sort_order среди всех задач пользователя
+  const minSortOrder = await sql<{ min: number | null }[]>`
+    SELECT MIN(sort_order) as min
+    FROM todo_myday
+    WHERE user_id=${userId}
+  `;
+
+  // Новая задача получит sort_order меньше минимального
+  const newSortOrder = (minSortOrder[0]?.min ?? 1) - 1;
+
   await sql`
     INSERT INTO todo_myday (id, title, completed, sort_order, user_id)
-    VALUES (gen_random_uuid(), ${title}, false,
-      COALESCE((SELECT MAX(sort_order) + 1 FROM todo_myday WHERE user_id=${userId}), 1),
-      ${userId}
-    )
+    VALUES (gen_random_uuid(), ${title}, false, ${newSortOrder}, ${userId})
   `;
 
   revalidatePath("/dashboard/todo");
@@ -82,18 +90,46 @@ export async function deleteTodoTask(_prev: DeleteState, formData: FormData) {
   }
 }
 
-// app/lib/actions.ts
+// Переключение статуса - при снятии галочки переносим наверх
 export async function toggleTodo(id: string) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) throw new Error("Unauthorized");
 
-  // Простое атомарное переключение без изменения sort_order
-  await sql`
-    UPDATE todo_myday
-    SET completed = NOT completed
+  // Получаем текущее состояние задачи
+  const currentTask = await sql<{ completed: boolean }[]>`
+    SELECT completed
+    FROM todo_myday
     WHERE id = ${id} AND user_id = ${userId}
   `;
+
+  if (!currentTask.length) throw new Error("Task not found");
+
+  const willBeCompleted = !currentTask[0].completed;
+
+  if (willBeCompleted) {
+    // Задача становится выполненной - просто меняем статус
+    await sql`
+      UPDATE todo_myday
+      SET completed = true
+      WHERE id = ${id} AND user_id = ${userId}
+    `;
+  } else {
+    // Задача становится невыполненной - переносим в начало списка
+    const minSortOrder = await sql<{ min: number | null }[]>`
+      SELECT MIN(sort_order) as min
+      FROM todo_myday
+      WHERE user_id=${userId}
+    `;
+
+    const newSortOrder = (minSortOrder[0]?.min ?? 1) - 1;
+
+    await sql`
+      UPDATE todo_myday
+      SET completed = false, sort_order = ${newSortOrder}
+      WHERE id = ${id} AND user_id = ${userId}
+    `;
+  }
 
   revalidatePath("/dashboard/todo");
 }
