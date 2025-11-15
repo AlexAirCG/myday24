@@ -1,10 +1,22 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { DeleteTodo, UpdateInvoiceTodo } from "../todo/buttons";
 import { TbArrowsUpDown } from "react-icons/tb";
 import { CheckboxTodo } from "../todo/checkbox-todo";
 import { toggleTodo } from "@/app/lib/actions";
+import {
+  elementFromPointIgnoringDragged,
+  getScrollParent,
+  move,
+} from "./utils/dnd";
+import { updateTodoInline, type UpdateState } from "@/app/lib/actions";
 
 interface Todo {
   id: string;
@@ -13,56 +25,6 @@ interface Todo {
 }
 interface Props {
   todos: Todo[];
-}
-
-// move: Функция для перемещения элемента в массиве. Она копирует исходный массив, удаляет элемент по индексу from и вставляет его на новый индекс to.
-function move<T>(arr: T[], from: number, to: number) {
-  if (from === -1 || to === -1 || from === to) return arr;
-  const copy = [...arr];
-  const [item] = copy.splice(from, 1);
-  copy.splice(to, 0, item);
-  return copy;
-}
-
-// функция получает элемент на экране по координатам, игнорируя тот, который перетаскивается. Это
-// позволяет избежать выбора самого перетаскиваемого элемента.
-function elementFromPointIgnoringDragged(
-  x: number,
-  y: number,
-  draggedId: string | null
-): HTMLElement | null {
-  const draggedEl = draggedId
-    ? (document.querySelector(`[data-id="${draggedId}"]`) as HTMLElement | null)
-    : null;
-
-  let saved: string | null = null;
-  if (draggedEl) {
-    saved = draggedEl.style.pointerEvents;
-    draggedEl.style.pointerEvents = "none";
-  }
-  const el = document.elementFromPoint(x, y) as HTMLElement | null;
-  if (draggedEl) {
-    draggedEl.style.pointerEvents = saved ?? "";
-  }
-  return el;
-}
-
-// функция возвращает ближайший элемент, который может прокручиваться в контейнере. Это нужно для того, чтобы при перетаскивании автоматически прокручивать список, если курсор находится близко к краю экрана.
-function getScrollParent(el: HTMLElement | null): HTMLElement {
-  let node: HTMLElement | null = el;
-  while (node && node !== document.body) {
-    const style = getComputedStyle(node);
-    const overflowY = style.overflowY;
-    if (
-      (overflowY === "auto" || overflowY === "scroll") &&
-      node.scrollHeight > node.clientHeight
-    ) {
-      return node;
-    }
-    node = node.parentElement;
-  }
-  // fallback — страница
-  return (document.scrollingElement as HTMLElement) || document.documentElement;
 }
 
 export default function TableTodoShop({ todos }: Props) {
@@ -84,6 +46,33 @@ export default function TableTodoShop({ todos }: Props) {
     null
   );
   const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
+
+  // редактирование
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState<string>("");
+  const [updateState, updateAction] = useActionState<UpdateState, FormData>(
+    updateTodoInline,
+    { ok: true }
+  );
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const mouseDownRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingId) return;
+    // Дадим полю смонтироваться
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      // Если фокус не от мыши — ставим курсор в конец
+      if (!mouseDownRef.current) {
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+      }
+      // Сброс флага
+      mouseDownRef.current = false;
+    });
+  }, [editingId]);
 
   // анимация улетания невыполненной задачи
   const [animatingDown, setAnimatingDown] = useState<Set<string>>(new Set());
@@ -107,13 +96,25 @@ export default function TableTodoShop({ todos }: Props) {
   const dragImageRef = useRef<HTMLElement | null>(null);
   const lastAutoScroll = useRef<number>(0);
 
-  // ✅ 4. Функции-хелперы
+  // ✅ 4. Функции-хелпер
+  // Фокусим инпут сразу при входе в режим редактирования
+  // const inputAutofocusRef = (el: HTMLInputElement | null) => {
+  //   if (el) {
+  //     // Небольшая задержка, чтобы элемент гарантированно был в DOM
+  //     requestAnimationFrame(() => {
+  //       el.focus();
+  //       el.select();
+  //     });
+  //   }
+  // };
+
   function flashRow(el: HTMLElement) {
     el.classList.add("ring-2", "ring-emerald-400", "animate-pulse");
     setTimeout(() => {
       el.classList.remove("ring-2", "ring-emerald-400", "animate-pulse");
     }, 500);
   }
+
   async function handleToggleOptimistic(id: string, next: boolean) {
     if (pendingToggles.has(id)) {
       console.warn(`Toggle already pending for ${id}`);
@@ -329,7 +330,6 @@ export default function TableTodoShop({ todos }: Props) {
   };
 
   // Функции автоскроллинга
-  // const lastAutoScroll = useRef<number>(0);
   function autoScrollIfNearEdgeXY(
     container: HTMLElement,
     x: number,
@@ -593,10 +593,77 @@ export default function TableTodoShop({ todos }: Props) {
                   onToggle={(next) => handleToggleOptimistic(todo.id, next)}
                 />
 
-                <div className="w-full ml-2 select-text">{todo.title}</div>
+                {/* <div className="w-full ml-2 select-text">{todo.title}</div> */}
+                {editingId === todo.id ? (
+                  <form
+                    className="w-full ml-2"
+                    action={updateAction}
+                    onSubmitCapture={() => {
+                      // оптимистично обновим локальный список и закроем инпут
+                      const next = draftTitle.trim();
+                      if (next && next !== todo.title) {
+                        setList((prev) =>
+                          prev.map((t) =>
+                            t.id === todo.id ? { ...t, title: next } : t
+                          )
+                        );
+                      }
+                      setEditingId(null);
+                    }}
+                  >
+                    <input type="hidden" name="id" value={todo.id} />
+                    <input
+                      ref={inputRef}
+                      name="title"
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      onMouseDown={() => {
+                        // Пользователь сам выберет позицию курсора – не вмешиваемся
+                        mouseDownRef.current = true;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditingId(null);
+                          setDraftTitle("");
+                        }
+                        if (e.key === "Enter") {
+                          if (!draftTitle.trim()) {
+                            e.preventDefault();
+                            return setEditingId(null);
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const next = e.currentTarget.value.trim();
+                        if (next && next !== todo.title) {
+                          e.currentTarget.form?.requestSubmit();
+                        } else {
+                          setEditingId(null);
+                        }
+                      }}
+                      className="w-full bg-transparent outline-none border-b border-gray-300 focus:border-blue-500"
+                      placeholder="Название задачи"
+                      autoComplete="off"
+                    />
+                  </form>
+                ) : (
+                  <div
+                    className="w-full ml-2 select-text cursor-text"
+                    onClick={() => {
+                      // Не открываем редактирование, если идёт перетаскивание
+                      if (dragId) return;
+                      setEditingId(todo.id);
+                      setDraftTitle(todo.title);
+                    }}
+                    title="Нажмите, чтобы редактировать"
+                  >
+                    {todo.title}
+                  </div>
+                )}
 
                 <div className="flex p-1 md:p-1 items-center justify-center gap-1">
-                  <UpdateInvoiceTodo id={todo.id} />
+                  {/* <UpdateInvoiceTodo id={todo.id} /> */}
                   <DeleteTodo
                     id={todo.id}
                     onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
@@ -655,10 +722,75 @@ export default function TableTodoShop({ todos }: Props) {
                   onToggle={(next) => handleToggleOptimistic(todo.id, next)}
                 />
 
-                <div className="w-full ml-2 select-text">{todo.title}</div>
+                {/* <div className="w-full ml-2 select-text">{todo.title}</div> */}
+                {editingId === todo.id ? (
+                  <form
+                    className="w-full ml-2"
+                    action={updateAction}
+                    onSubmitCapture={() => {
+                      // оптимистично обновим локальный список и закроем инпут
+                      const next = draftTitle.trim();
+                      if (next && next !== todo.title) {
+                        setList((prev) =>
+                          prev.map((t) =>
+                            t.id === todo.id ? { ...t, title: next } : t
+                          )
+                        );
+                      }
+                      setEditingId(null);
+                    }}
+                  >
+                    <input type="hidden" name="id" value={todo.id} />
+                    <input
+                      ref={inputRef}
+                      name="title"
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditingId(null);
+                          setDraftTitle("");
+                        }
+                        if (e.key === "Enter") {
+                          // Пустое — не отправляем
+                          if (!draftTitle.trim()) {
+                            e.preventDefault();
+                            return setEditingId(null);
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const next = e.currentTarget.value.trim();
+                        if (next && next !== todo.title) {
+                          // Сохраняем при потере фокуса
+                          e.currentTarget.form?.requestSubmit();
+                        } else {
+                          setEditingId(null);
+                        }
+                      }}
+                      className="w-full bg-transparent outline-none border-b border-gray-300 focus:border-blue-500"
+                      placeholder="Название задачи"
+                      autoComplete="off"
+                    />
+                  </form>
+                ) : (
+                  <div
+                    className="w-full ml-2 select-text cursor-text"
+                    onClick={() => {
+                      // Не открываем редактирование, если идёт перетаскивание
+                      if (dragId) return;
+                      setEditingId(todo.id);
+                      setDraftTitle(todo.title);
+                    }}
+                    title="Нажмите, чтобы редактировать"
+                  >
+                    {todo.title}
+                  </div>
+                )}
 
                 <div className="flex p-1 md:p-1 items-center justify-center gap-1">
-                  <UpdateInvoiceTodo id={todo.id} />
+                  {/* <UpdateInvoiceTodo id={todo.id} /> */}
                   <DeleteTodo
                     id={todo.id}
                     onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}

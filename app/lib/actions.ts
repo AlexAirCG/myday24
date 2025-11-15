@@ -10,6 +10,11 @@ import { auth } from "@/auth";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
+const UpdateTitleSchema = z.object({
+  id: z.uuid(),
+  title: z.string().trim().min(1, "Пустой заголовок"),
+});
+
 const FormSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -18,6 +23,8 @@ const FormSchema = z.object({
 const DeleteSchema = z.object({
   id: z.uuid(),
 });
+
+export type UpdateState = { ok: boolean; id?: string; error?: string };
 export type DeleteState = { ok: boolean; id?: string; error?: string };
 
 // Создание задачи - добавляем в НАЧАЛО списка
@@ -50,25 +57,58 @@ export async function createTodoFetch(formData: FormData) {
   revalidatePath("/dashboard/todo");
 }
 
-export async function updateTodo(id: string, formData: FormData) {
+export async function updateTodoInline(
+  _prev: UpdateState,
+  formData: FormData
+): Promise<UpdateState> {
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
+  if (!userId) return { ok: false, error: "Unauthorized" };
 
-  const { title } = FormSchema.parse({
-    title: formData.get("title"),
-    id: formData.get("id") ?? "",
+  const parsed = UpdateTitleSchema.safeParse({
+    id: String(formData.get("id") || ""),
+    title: String(formData.get("title") || ""),
   });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Ошибка валидации",
+    };
+  }
+
+  const { id, title } = parsed.data;
 
   await sql`
     UPDATE todo_myday
-    SET title = ${title}
-    WHERE id = ${id} AND user_id = ${userId}
+    SET title=${title}
+    WHERE id=${id} AND user_id=${userId}
   `;
 
-  revalidatePath("/dashboard/todo");
-  redirect("/dashboard/todo");
+  // Обновляем список. Если у вас список на другой странице (например /dashboard/shop),
+  // добавьте сюда revalidatePath('/dashboard/shop') тоже.
+  revalidatePath("/dashboard/shop");
+
+  return { ok: true, id };
 }
+// export async function updateTodo(id: string, formData: FormData) {
+//   const session = await auth();
+//   const userId = session?.user?.id;
+//   if (!userId) throw new Error("Unauthorized");
+
+//   const { title } = FormSchema.parse({
+//     title: formData.get("title"),
+//     id: formData.get("id") ?? "",
+//   });
+
+//   await sql`
+//     UPDATE todo_myday
+//     SET title = ${title}
+//     WHERE id = ${id} AND user_id = ${userId}
+//   `;
+
+//   revalidatePath("/dashboard/todo");
+//   redirect("/dashboard/todo");
+// }
 
 export async function deleteTodoTask(_prev: DeleteState, formData: FormData) {
   const session = await auth();

@@ -1,30 +1,24 @@
 import { fetchTodo } from "@/app/lib/data";
-import { inter } from "@/app/ui/fonts";
-import TableTodoShop from "@/app/ui/shop/table-todo-shop";
-import CreateTodo from "@/app/ui/todo/create-todo";
+import { Button } from "@/app/ui/button";
+import Image from "next/image";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const todos = await fetchTodo();
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* Фиксированная шапка (не прокручивается) */}
-      <div className="sticky top-0 z-10 flex flex-col w-full bg-sky-200 md:p-2">
-        <h1 className={`${inter.className} text-2xl md:mb-6`}>Дела</h1>
-        <CreateTodo />
+    <div className="flex flex-col items-center justify-center overflow-hidden  ">
+      <div className="flex justify-center items-center text-[18px] text-blue-800 gap-3">
+        На сегодня дел нет <Button className="p-2">Добавить</Button>
       </div>
-
-      {/* Прокручиваемая часть только для списка */}
-      <div
-        className="flex-1 min-h-0 overflow-y-auto md:p-2 overscroll-contain"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        <div className="mt-4 flex items-center justify-between gap-2 md:mt-8">
-          {/* <Search placeholder="Search city..." /> */}
-        </div>
-        <TableTodoShop todos={todos} />
-      </div>
+      <Image
+        src="/lazy_cat.jpg"
+        alt="lazy_cat"
+        width={300}
+        height={300}
+        priority={true}
+        className="rounded-lg m-5 shadow-[0_8px_12px_rgba(0,0,0,0.5)]"
+      />
     </div>
   );
 }
