@@ -1,6 +1,6 @@
 import { fetchTodoById } from "@/app/lib/data";
 import Breadcrumbs from "@/app/ui/todo/breadcrumbs";
-import EditTodo from "@/app/ui/todo/edit-todo";
+// import EditTodo from "@/app/ui/todo/edit-todo";
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -18,7 +18,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
           },
         ]}
       />
-      <EditTodo title={title} />
+      {/* <EditTodo title={title} /> */}
     </main>
   );
 }

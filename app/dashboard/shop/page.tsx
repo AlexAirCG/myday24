@@ -1,12 +1,29 @@
+import { fetchTodo } from "@/app/lib/data";
 import { inter } from "@/app/ui/fonts";
+import TableTodoShop from "@/app/ui/shop/table-todo-shop";
+import CreateTodo from "@/app/ui/todo/create-todo";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
+  const todos = await fetchTodo();
   return (
-    <div className="w-full">
-      <div className="flex w-full items-center justify-between">
-        <h1 className={`${inter.className} text-2xl`}>Дела</h1>
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Фиксированная шапка (не прокручивается) */}
+      <div className="sticky top-0 z-10 flex flex-col w-full bg-sky-200 md:p-2">
+        <h1 className={`${inter.className} text-2xl md:mb-6`}>Дела</h1>
+        <CreateTodo />
+      </div>
+
+      {/* Прокручиваемая часть только для списка */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto md:p-2 overscroll-contain"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        <div className="mt-4 flex items-center justify-between gap-2 md:mt-8">
+          {/* <Search placeholder="Search city..." /> */}
+        </div>
+        <TableTodoShop todos={todos} />
       </div>
     </div>
   );
