@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { DeleteTodo, UpdateInvoiceTodo } from "../todo/buttons";
+import { DeleteTodo } from "../todo/buttons";
 import { TbArrowsUpDown } from "react-icons/tb";
 import { CheckboxTodo } from "../todo/checkbox-todo";
 import { toggleTodo } from "@/app/lib/actions";
@@ -91,23 +91,11 @@ export default function TableTodoShop({ todos }: Props) {
   // глобальные обработчики touch-перетаскивания во время активного dnd
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Отслеживание pending toggle операций
-  // const pendingToggleRef = useRef<Set<string>>(new Set());
   // Хранилище клона для мыши
   const dragImageRef = useRef<HTMLElement | null>(null);
   const lastAutoScroll = useRef<number>(0);
 
   // ✅ 4. Функции-хелпер
-  // Фокусим инпут сразу при входе в режим редактирования
-  // const inputAutofocusRef = (el: HTMLInputElement | null) => {
-  //   if (el) {
-  //     // Небольшая задержка, чтобы элемент гарантированно был в DOM
-  //     requestAnimationFrame(() => {
-  //       el.focus();
-  //       el.select();
-  //     });
-  //   }
-  // };
-
   function flashRow(el: HTMLElement) {
     el.classList.add("ring-2", "ring-emerald-400", "animate-pulse");
     setTimeout(() => {
@@ -573,12 +561,10 @@ export default function TableTodoShop({ todos }: Props) {
               <div
                 key={todo.id}
                 data-id={todo.id}
-                // ВАЖНО: строка НЕ draggable
                 onDragOver={onRowDragOver}
                 onDragLeave={clearShadow}
                 onDragEnd={onRowDragEnd}
                 onDrop={onRowDrop}
-                // ВАЖНО: убрали overflowY: "auto"
                 style={{ touchAction: "pan-y" }} // overflowY по месту
                 className={[
                   `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
@@ -593,7 +579,6 @@ export default function TableTodoShop({ todos }: Props) {
                   onToggle={(next) => handleToggleOptimistic(todo.id, next)}
                 />
 
-                {/* <div className="w-full ml-2 select-text">{todo.title}</div> */}
                 {editingId === todo.id ? (
                   <form
                     className="w-full ml-2"
@@ -663,7 +648,6 @@ export default function TableTodoShop({ todos }: Props) {
                 )}
 
                 <div className="flex p-1 md:p-1 items-center justify-center gap-1">
-                  {/* <UpdateInvoiceTodo id={todo.id} /> */}
                   <DeleteTodo
                     id={todo.id}
                     onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
@@ -702,12 +686,10 @@ export default function TableTodoShop({ todos }: Props) {
               <div
                 key={todo.id}
                 data-id={todo.id}
-                // ВАЖНО: строка НЕ draggable
                 onDragOver={onRowDragOver}
                 onDragLeave={clearShadow}
                 onDragEnd={onRowDragEnd}
                 onDrop={onRowDrop}
-                // ВАЖНО: убрали overflowY: "auto"
                 style={{ touchAction: "pan-y" }} // overflowY по месту
                 className={[
                   `flex items-center bg-white border-gray-500 border-2 md:border-3 mb-1 md:mb-2 rounded w-full text-lg select-none transition-shadow shadow-[0_4px_8px_rgba(0,0,0,0.3)]
@@ -722,7 +704,6 @@ export default function TableTodoShop({ todos }: Props) {
                   onToggle={(next) => handleToggleOptimistic(todo.id, next)}
                 />
 
-                {/* <div className="w-full ml-2 select-text">{todo.title}</div> */}
                 {editingId === todo.id ? (
                   <form
                     className="w-full ml-2"
@@ -790,7 +771,6 @@ export default function TableTodoShop({ todos }: Props) {
                 )}
 
                 <div className="flex p-1 md:p-1 items-center justify-center gap-1">
-                  {/* <UpdateInvoiceTodo id={todo.id} /> */}
                   <DeleteTodo
                     id={todo.id}
                     onOptimisticDelete={() => handleDeleteOptimistic(todo.id)}
@@ -838,12 +818,7 @@ export default function TableTodoShop({ todos }: Props) {
               <TbArrowsUpDown className="w-5 h-5" />
             </div>
             <div className="w-full">{draggingTodo.title}</div>
-            <div className="flex p-1 md:p-1 items-center justify-end">
-              {/* Некликабельно из-за pointer-events: none на враппере */}
-
-              <UpdateInvoiceTodo id={draggingTodo.id} />
-              {/* <DeleteTodo title={draggingTodo.title} /> */}
-            </div>
+            <div className="flex p-1 md:p-1 items-center justify-end"></div>
           </div>
         </div>
       )}

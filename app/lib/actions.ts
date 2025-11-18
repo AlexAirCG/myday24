@@ -1,6 +1,5 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import postgres from "postgres";
 import z from "zod";
 import { signIn } from "@/auth";
@@ -84,31 +83,10 @@ export async function updateTodoInline(
     WHERE id=${id} AND user_id=${userId}
   `;
 
-  // Обновляем список. Если у вас список на другой странице (например /dashboard/shop),
-  // добавьте сюда revalidatePath('/dashboard/shop') тоже.
   revalidatePath("/dashboard/shop");
 
   return { ok: true, id };
 }
-// export async function updateTodo(id: string, formData: FormData) {
-//   const session = await auth();
-//   const userId = session?.user?.id;
-//   if (!userId) throw new Error("Unauthorized");
-
-//   const { title } = FormSchema.parse({
-//     title: formData.get("title"),
-//     id: formData.get("id") ?? "",
-//   });
-
-//   await sql`
-//     UPDATE todo_myday
-//     SET title = ${title}
-//     WHERE id = ${id} AND user_id = ${userId}
-//   `;
-
-//   revalidatePath("/dashboard/todo");
-//   redirect("/dashboard/todo");
-// }
 
 export async function deleteTodoTask(_prev: DeleteState, formData: FormData) {
   const session = await auth();
@@ -148,12 +126,16 @@ export async function toggleTodo(id: string) {
   const willBeCompleted = !currentTask[0].completed;
 
   if (willBeCompleted) {
-    // Задача становится выполненной - просто меняем статус
-    await sql`
-      UPDATE todo_myday
-      SET completed = true
-      WHERE id = ${id} AND user_id = ${userId}
-    `;
+    await sql.begin(async (trx) => {
+      await trx`
+        UPDATE todo_myday
+        SET completed = true
+        WHERE id = ${id} AND user_id = ${userId}
+      `;
+      await trx`
+        INSERT INTO todo_usage (task_id, user_id) VALUES (${id}, ${userId})
+      `;
+    });
   } else {
     // Задача становится невыполненной - переносим в начало списка
     const minSortOrder = await sql<{ min: number | null }[]>`
@@ -170,6 +152,29 @@ export async function toggleTodo(id: string) {
       WHERE id = ${id} AND user_id = ${userId}
     `;
   }
+  // if (willBeCompleted) {
+  //   // Задача становится выполненной - просто меняем статус
+  //   await sql`
+  //     UPDATE todo_myday
+  //     SET completed = true
+  //     WHERE id = ${id} AND user_id = ${userId}
+  //   `;
+  // } else {
+  //   // Задача становится невыполненной - переносим в начало списка
+  //   const minSortOrder = await sql<{ min: number | null }[]>`
+  //     SELECT MIN(sort_order) as min
+  //     FROM todo_myday
+  //     WHERE user_id=${userId}
+  //   `;
+
+  //   const newSortOrder = (minSortOrder[0]?.min ?? 1) - 1;
+
+  //   await sql`
+  //     UPDATE todo_myday
+  //     SET completed = false, sort_order = ${newSortOrder}
+  //     WHERE id = ${id} AND user_id = ${userId}
+  //   `;
+  // }
 
   revalidatePath("/dashboard/todo");
 }
