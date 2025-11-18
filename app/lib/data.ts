@@ -19,11 +19,30 @@ export async function fetchTodo() {
 
   try {
     const todos = await sql<Todo[]>`
-      SELECT id, title, completed, user_id
-      FROM todo_myday
-      WHERE user_id = ${userId}
-      ORDER BY completed ASC, sort_order ASC, id ASC
+      SELECT t.id, t.title, t.completed, t.user_id
+      FROM todo_myday t
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS cnt_30d,
+          MAX(used_at)    AS last_used
+        FROM todo_usage u
+        WHERE u.task_id = t.id
+          AND u.used_at >= now() - interval '30 days'
+      ) u ON true
+      WHERE t.user_id = ${userId}
+      ORDER BY
+        t.completed ASC,
+        CASE WHEN NOT t.completed THEN t.sort_order END ASC NULLS LAST,
+        CASE WHEN t.completed THEN COALESCE(u.cnt_30d, 0) END DESC NULLS LAST,
+        CASE WHEN t.completed THEN u.last_used END DESC NULLS LAST,
+        t.id ASC
     `;
+    // const todos = await sql<Todo[]>`
+    //   SELECT id, title, completed, user_id
+    //   FROM todo_myday
+    //   WHERE user_id = ${userId}
+    //   ORDER BY completed ASC, sort_order ASC, id ASC
+    // `;
     console.log(`✅ Found ${todos.length} todos for user ${userId}`);
     return todos;
   } catch (error) {
