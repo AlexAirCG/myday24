@@ -53,7 +53,8 @@ export async function createTodoFetch(formData: FormData) {
     VALUES (gen_random_uuid(), ${title}, false, ${newSortOrder}, ${userId})
   `;
 
-  revalidatePath("/dashboard/todo");
+  // revalidatePath("/dashboard/todo");
+  revalidatePath("/dashboard/shop");
 }
 
 export async function updateTodoInline(
@@ -152,31 +153,9 @@ export async function toggleTodo(id: string) {
       WHERE id = ${id} AND user_id = ${userId}
     `;
   }
-  // if (willBeCompleted) {
-  //   // Задача становится выполненной - просто меняем статус
-  //   await sql`
-  //     UPDATE todo_myday
-  //     SET completed = true
-  //     WHERE id = ${id} AND user_id = ${userId}
-  //   `;
-  // } else {
-  //   // Задача становится невыполненной - переносим в начало списка
-  //   const minSortOrder = await sql<{ min: number | null }[]>`
-  //     SELECT MIN(sort_order) as min
-  //     FROM todo_myday
-  //     WHERE user_id=${userId}
-  //   `;
 
-  //   const newSortOrder = (minSortOrder[0]?.min ?? 1) - 1;
-
-  //   await sql`
-  //     UPDATE todo_myday
-  //     SET completed = false, sort_order = ${newSortOrder}
-  //     WHERE id = ${id} AND user_id = ${userId}
-  //   `;
-  // }
-
-  revalidatePath("/dashboard/todo");
+  // revalidatePath("/dashboard/todo");
+  revalidatePath("/dashboard/shop");
 }
 
 export async function authenticate(

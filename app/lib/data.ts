@@ -37,12 +37,7 @@ export async function fetchTodo() {
         CASE WHEN t.completed THEN u.last_used END DESC NULLS LAST,
         t.id ASC
     `;
-    // const todos = await sql<Todo[]>`
-    //   SELECT id, title, completed, user_id
-    //   FROM todo_myday
-    //   WHERE user_id = ${userId}
-    //   ORDER BY completed ASC, sort_order ASC, id ASC
-    // `;
+
     console.log(`✅ Found ${todos.length} todos for user ${userId}`);
     return todos;
   } catch (error) {
