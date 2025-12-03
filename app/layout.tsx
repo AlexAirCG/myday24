@@ -1,4 +1,5 @@
 import "@/app/ui/global.css";
+import "react-datepicker/dist/react-datepicker.css";
 import { inter } from "./ui/fonts";
 
 export default function RootLayout({
