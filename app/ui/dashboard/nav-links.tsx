@@ -4,7 +4,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FaShopify } from "react-icons/fa6";
-import { LuListTodo } from "react-icons/lu";
+import { VscGraph } from "react-icons/vsc";
 import { IoCalendarNumberOutline } from "react-icons/io5";
 import { CiMemoPad } from "react-icons/ci";
 
@@ -49,6 +49,18 @@ export default function NavLinks() {
       >
         <FaShopify className="w-6 h-6" />
         Покупки
+      </Link>
+      <Link
+        className={clsx(
+          "flex grow items-center justify-center gap-2 rounded-md bg-gray-200 p-2 text-[16px] font-medium hover:bg-sky-200 hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3",
+          {
+            "bg-sky-200 text-blue-600": pathName === "/dashboard/graph",
+          }
+        )}
+        href={"/dashboard/graph"}
+      >
+        <VscGraph className="w-6 h-6" />
+        График
       </Link>
     </>
   );

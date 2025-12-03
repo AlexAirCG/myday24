@@ -1,0 +1,458 @@
+"use client";
+import { useMemo, useState } from "react";
+
+type RawPoint = {
+  id: string;
+  year: number;
+  month: number; // 1..12
+  day: number; // 1..31 (зависит от месяца)
+  calories: number; // 0..5000
+};
+
+const DAY_PIXEL_STEP = 10;
+const GRAPH_HEIGHT = 300;
+const GRAPH_TOP_PADDING = 10;
+const GRAPH_BOTTOM_PADDING = 10;
+
+const DEFAULT_GRAPH_WIDTH = 600;
+const CALORIES_MIN = 0;
+const CALORIES_MAX = 5000;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const createId = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+
+// Количество дней в месяце
+const daysInMonth = (year: number, month1to12: number) =>
+  new Date(year, month1to12, 0).getDate();
+
+export function GraphContent() {
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [calories, setCalories] = useState<string>("");
+  const [points, setPoints] = useState<RawPoint[]>([]);
+  const [error, setError] = useState<string>("");
+
+  // Минимальная дата среди всех точек (UTC)
+  const minDateMs = useMemo(() => {
+    if (!points.length) return null;
+    return Math.min(...points.map((p) => Date.UTC(p.year, p.month - 1, p.day)));
+  }, [points]);
+
+  // Динамический шаг по Y (пикселей на 1 калорию)
+  const caloriePixelStep = useMemo(() => {
+    const drawableHeight =
+      GRAPH_HEIGHT - GRAPH_TOP_PADDING - GRAPH_BOTTOM_PADDING;
+    const range = Math.max(1, CALORIES_MAX - CALORIES_MIN);
+    return drawableHeight / range;
+  }, []);
+
+  // Координаты и сортировка по времени (год-месяц-день)
+  const pointsWithCoords = useMemo(() => {
+    if (!points.length) return [];
+
+    return points
+      .map((p) => {
+        const timeMs = Date.UTC(p.year, p.month - 1, p.day);
+        const baseMs = minDateMs ?? timeMs;
+        const daysDiff = (timeMs - baseMs) / MS_PER_DAY; // целое число
+
+        const x = daysDiff * DAY_PIXEL_STEP;
+
+        const y =
+          GRAPH_HEIGHT -
+          GRAPH_BOTTOM_PADDING -
+          (p.calories - CALORIES_MIN) * caloriePixelStep;
+
+        return { ...p, x, y };
+      })
+      .sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        if (a.month !== b.month) return a.month - b.month;
+        return a.day - b.day;
+      });
+  }, [points, minDateMs, caloriePixelStep]);
+
+  const graphWidth = useMemo(() => {
+    if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
+    const last = pointsWithCoords[pointsWithCoords.length - 1];
+    return Math.max(last.x + DAY_PIXEL_STEP, DEFAULT_GRAPH_WIDTH);
+  }, [pointsWithCoords]);
+
+  const handleAddPoint = () => {
+    if (!selectedDate || !calories) {
+      setError("Выберите дату и укажите значение.");
+      return;
+    }
+
+    // input type="date" -> "YYYY-MM-DD"
+    const parts = selectedDate.split("-");
+    if (parts.length !== 3) {
+      setError("Некорректный формат даты.");
+      return;
+    }
+
+    const [yStr, mStr, dStr] = parts;
+    const yearValue = Number(yStr);
+    const monthValue = Number(mStr);
+    const dayValue = Number(dStr);
+    const caloriesValue = Number(calories);
+
+    if (
+      Number.isNaN(yearValue) ||
+      Number.isNaN(monthValue) ||
+      Number.isNaN(dayValue) ||
+      Number.isNaN(caloriesValue)
+    ) {
+      setError("Некорректный ввод.");
+      return;
+    }
+
+    if (monthValue < 1 || monthValue > 12) {
+      setError("Некорректный месяц.");
+      return;
+    }
+
+    const dim = daysInMonth(yearValue, monthValue);
+    if (dayValue < 1 || dayValue > dim) {
+      setError("Некорректный день месяца.");
+      return;
+    }
+
+    if (caloriesValue < CALORIES_MIN || caloriesValue > CALORIES_MAX) {
+      setError(
+        `Значение должно быть в диапазоне ${CALORIES_MIN}-${CALORIES_MAX}.`
+      );
+      return;
+    }
+
+    const nextPoint: RawPoint = {
+      id: createId(),
+      year: yearValue,
+      month: monthValue,
+      day: dayValue,
+      calories: caloriesValue,
+    };
+
+    setPoints((prev) => [...prev, nextPoint]);
+    setError("");
+    setCalories("");
+    // Дату оставляем, чтобы удобно добавлять несколько точек подряд
+  };
+
+  return (
+    <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
+      <h2 className="text-xl font-semibold text-slate-800">График калорий</h2>
+
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="flex flex-col text-sm text-slate-700">
+          Дата
+          <input
+            type="date"
+            className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+        </label>
+
+        <label className="flex flex-col text-sm text-slate-700">
+          Потреблённые калории
+          <input
+            type="number"
+            min={CALORIES_MIN}
+            max={CALORIES_MAX}
+            className="mt-1 w-48 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            placeholder={`Введите значение (${CALORIES_MIN}-${CALORIES_MAX})`}
+            value={calories}
+            onChange={(event) => setCalories(event.target.value)}
+          />
+        </label>
+
+        <button
+          type="button"
+          className="inline-flex items-center rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline  focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+          onClick={handleAddPoint}
+        >
+          Добавить
+        </button>
+      </div>
+
+      {error ? (
+        <p className="text-sm font-medium text-red-600">{error}</p>
+      ) : null}
+
+      <div className="relative h-[300px] w-full overflow-auto rounded-lg bg-yellow-200">
+        <svg
+          className="h-full"
+          width={graphWidth}
+          height={GRAPH_HEIGHT}
+          viewBox={`0 0 ${graphWidth} ${GRAPH_HEIGHT}`}
+        >
+          {/* Линии */}
+          {pointsWithCoords.slice(1).map((point, index) => {
+            const previous = pointsWithCoords[index];
+            return (
+              <line
+                key={`${point.id}-line`}
+                x1={previous.x}
+                y1={previous.y}
+                x2={point.x}
+                y2={point.y}
+                stroke="rgb(59 130 246)"
+                strokeWidth={4}
+              />
+            );
+          })}
+
+          {/* Точки */}
+          {pointsWithCoords.map((point) => (
+            <g key={point.id}>
+              <circle
+                cx={point.x}
+                cy={point.y}
+                r={4}
+                fill="rgb(59 130 246)"
+                strokeWidth={1.5}
+              />
+              <title>{`Дата: ${String(point.day).padStart(2, "0")}.${String(
+                point.month
+              ).padStart(2, "0")}.${point.year}, значение: ${
+                point.calories
+              }`}</title>
+            </g>
+          ))}
+        </svg>
+      </div>
+    </section>
+  );
+}
+
+// "use client";
+// import { useMemo, useState } from "react";
+
+// type RawPoint = {
+//   id: string;
+//   year: number;
+//   month: number; // 1..12
+//   day: number; // 1..31 (зависит от месяца)
+//   hours: number; // 1..300
+// };
+
+// const MONTH_PIXEL_STEP = 20;
+// const GRAPH_HEIGHT = 200;
+// const GRAPH_TOP_PADDING = 10;
+// const GRAPH_BOTTOM_PADDING = 10;
+
+// const DEFAULT_GRAPH_WIDTH = 600;
+// const HOURS_MIN = 0;
+// const HOURS_MAX = 5000;
+
+// const createId = () =>
+//   typeof crypto !== "undefined" && crypto.randomUUID
+//     ? crypto.randomUUID()
+//     : Math.random().toString(36).slice(2);
+
+// // Количество дней в месяце
+// const daysInMonth = (year: number, month1to12: number) =>
+//   new Date(year, month1to12, 0).getDate();
+
+// export function GraphContent() {
+//   const [selectedDate, setSelectedDate] = useState<string>("");
+//   const [hours, setHours] = useState<string>("");
+//   const [points, setPoints] = useState<RawPoint[]>([]);
+//   const [error, setError] = useState<string>("");
+
+//   // Минимальный год среди всех точек
+//   const minYear = useMemo(
+//     () => (points.length ? Math.min(...points.map((p) => p.year)) : null),
+//     [points]
+//   );
+
+//   // Динамический шаг по Y (пикселей на 1 час)
+//   const hourPixelStep = useMemo(() => {
+//     const drawableHeight =
+//       GRAPH_HEIGHT - GRAPH_TOP_PADDING - GRAPH_BOTTOM_PADDING;
+//     const range = Math.max(1, HOURS_MAX - HOURS_MIN);
+//     return drawableHeight / range;
+//   }, []);
+
+//   // Координаты и сортировка по времени (год-месяц-день)
+//   const pointsWithCoords = useMemo(() => {
+//     if (!points.length) return [];
+
+//     return points
+//       .map((p) => {
+//         const baseYear = minYear ?? p.year;
+//         const monthIndex = (p.year - baseYear) * 12 + (p.month - 1); // 0-базный месяц
+//         const dim = daysInMonth(p.year, p.month);
+//         const dayOffset = Math.min(Math.max(p.day, 1), dim); // защитно
+//         const withinMonth = (dayOffset - 1) / dim; // 0..(1-1/dim)
+//         const x = (monthIndex + withinMonth) * MONTH_PIXEL_STEP;
+
+//         const y =
+//           GRAPH_HEIGHT -
+//           GRAPH_BOTTOM_PADDING -
+//           (p.hours - HOURS_MIN) * hourPixelStep;
+
+//         return { ...p, x, y };
+//       })
+//       .sort((a, b) => {
+//         if (a.year !== b.year) return a.year - b.year;
+//         if (a.month !== b.month) return a.month - b.month;
+//         return a.day - b.day;
+//       });
+//   }, [points, minYear, hourPixelStep]);
+
+//   const graphWidth = useMemo(() => {
+//     if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
+//     const last = pointsWithCoords[pointsWithCoords.length - 1];
+//     return Math.max(last.x + MONTH_PIXEL_STEP, DEFAULT_GRAPH_WIDTH);
+//   }, [pointsWithCoords]);
+
+//   const handleAddPoint = () => {
+//     if (!selectedDate || !hours) {
+//       setError("Выберите дату и укажите значение.");
+//       return;
+//     }
+
+//     // input type="date" -> "YYYY-MM-DD"
+//     const parts = selectedDate.split("-");
+//     if (parts.length !== 3) {
+//       setError("Некорректный формат даты.");
+//       return;
+//     }
+
+//     const [yStr, mStr, dStr] = parts;
+//     const yearValue = Number(yStr);
+//     const monthValue = Number(mStr);
+//     const dayValue = Number(dStr);
+//     const hoursValue = Number(hours);
+
+//     if (
+//       Number.isNaN(yearValue) ||
+//       Number.isNaN(monthValue) ||
+//       Number.isNaN(dayValue) ||
+//       Number.isNaN(hoursValue)
+//     ) {
+//       setError("Некорректный ввод.");
+//       return;
+//     }
+
+//     if (monthValue < 1 || monthValue > 12) {
+//       setError("Некорректный месяц.");
+//       return;
+//     }
+
+//     const dim = daysInMonth(yearValue, monthValue);
+//     if (dayValue < 1 || dayValue > dim) {
+//       setError("Некорректный день месяца.");
+//       return;
+//     }
+
+//     if (hoursValue < HOURS_MIN || hoursValue > HOURS_MAX) {
+//       setError(`Значение должно быть в диапазоне ${HOURS_MIN}-${HOURS_MAX}.`);
+//       return;
+//     }
+
+//     const nextPoint: RawPoint = {
+//       id: createId(),
+//       year: yearValue,
+//       month: monthValue,
+//       day: dayValue,
+//       hours: hoursValue,
+//     };
+
+//     setPoints((prev) => [...prev, nextPoint]);
+//     setError("");
+//     setHours("");
+//     // Дату оставляем, чтобы удобно добавлять несколько точек подряд
+//   };
+
+//   return (
+//     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
+//       <h2 className="text-xl font-semibold text-slate-800">График калорий</h2>
+
+//       <div className="flex flex-wrap items-end gap-4">
+//         <label className="flex flex-col text-sm text-slate-700">
+//           Дата
+//           <input
+//             type="date"
+//             className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+//             value={selectedDate}
+//             onChange={(e) => setSelectedDate(e.target.value)}
+//           />
+//         </label>
+
+//         <label className="flex flex-col text-sm text-slate-700">
+//           Потреблённые калории
+//           <input
+//             type="number"
+//             min={HOURS_MIN}
+//             max={HOURS_MAX}
+//             className="mt-1 w-48 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+//             placeholder={`Введите значение (${HOURS_MIN}-${HOURS_MAX})`}
+//             value={hours}
+//             onChange={(event) => setHours(event.target.value)}
+//           />
+//         </label>
+
+//         <button
+//           type="button"
+//           className="inline-flex items-center rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline  focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+//           onClick={handleAddPoint}
+//         >
+//           Добавить
+//         </button>
+//       </div>
+
+//       {error ? (
+//         <p className="text-sm font-medium text-red-600">{error}</p>
+//       ) : null}
+
+//       <div className="relative h-[300px] w-full overflow-auto rounded-lg bg-yellow-200">
+//         <svg
+//           className="h-full"
+//           width={graphWidth}
+//           height={GRAPH_HEIGHT}
+//           viewBox={`0 0 ${graphWidth} ${GRAPH_HEIGHT}`}
+//         >
+//           {/* Линии */}
+//           {pointsWithCoords.slice(1).map((point, index) => {
+//             const previous = pointsWithCoords[index];
+//             return (
+//               <line
+//                 key={`${point.id}-line`}
+//                 x1={previous.x}
+//                 y1={previous.y}
+//                 x2={point.x}
+//                 y2={point.y}
+//                 stroke="rgb(59 130 246)"
+//                 strokeWidth={4}
+//               />
+//             );
+//           })}
+
+//           {/* Точки */}
+//           {pointsWithCoords.map((point) => (
+//             <g key={point.id}>
+//               <circle
+//                 cx={point.x}
+//                 cy={point.y}
+//                 r={4}
+//                 fill="rgb(59 130 246)"
+//                 strokeWidth={1.5}
+//               />
+//               <title>{`Дата: ${String(point.day).padStart(2, "0")}.${String(
+//                 point.month
+//               ).padStart(2, "0")}.${point.year}, значение: ${
+//                 point.hours
+//               }`}</title>
+//             </g>
+//           ))}
+//         </svg>
+//       </div>
+//     </section>
+//   );
+// }
