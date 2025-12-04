@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, forwardRef } from "react";
 import DatePicker from "react-datepicker";
 import { ru } from "date-fns/locale/ru";
 
@@ -31,11 +31,40 @@ const createId = () =>
 const daysInMonth = (year: number, month1to12: number) =>
   new Date(year, month1to12, 0).getDate();
 
+// Простая проверка мобильного UA
+const isMobileUA = () =>
+  typeof navigator !== "undefined" &&
+  /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+
+// Кастомный инпут с forwardRef — нужен, чтобы управлять фокусом (blur → focus)
+const DateInput = forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className = "", ...props }, ref) => (
+  <input
+    {...props}
+    ref={ref}
+    className={
+      className ||
+      "mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+    }
+  />
+));
+DateInput.displayName = "DateInput";
+
 export function GraphContent() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [calories, setCalories] = useState<string>("");
   const [points, setPoints] = useState<RawPoint[]>([]);
   const [error, setError] = useState<string>("");
+
+  // Мобильность определяем один раз на клиенте
+  const isMobile = useMemo(isMobileUA, []);
+
+  // Управление показом клавиатуры на мобильных
+  const [allowTyping, setAllowTyping] = useState(false); // можно ли печатать в поле даты
+  const [calendarOpen, setCalendarOpen] = useState(false); // открыт ли календарь
+  const dateInputRef = useRef<HTMLInputElement | null>(null);
 
   // Минимальная дата среди всех точек (UTC)
   const minDateMs = useMemo(() => {
@@ -150,7 +179,36 @@ export function GraphContent() {
             showPopperArrow={false}
             isClearable
             todayButton="Сегодня"
-            className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            // КЛЮЧЕВОЕ: на мобильных по умолчанию не даём печатать, чтобы не вызывать клавиатуру
+            readOnly={isMobile && !allowTyping}
+            // Отслеживаем открытие/закрытие календаря
+            onCalendarOpen={() => setCalendarOpen(true)}
+            onCalendarClose={() => {
+              setCalendarOpen(false);
+              setAllowTyping(false); // при закрытии снова запрещаем ручной ввод
+            }}
+            // Если календарь открыт и пользователь повторно тапает по полю —
+            // включаем ввод и принудительно показываем клавиатуру
+            onInputClick={() => {
+              if (isMobile && calendarOpen && !allowTyping) {
+                setAllowTyping(true);
+                // Чтобы ОС показала клавиатуру: blur → focus
+                requestAnimationFrame(() => {
+                  const el = dateInputRef.current;
+                  if (!el) return;
+                  el.blur();
+                  setTimeout(() => el.focus(), 0);
+                });
+              }
+            }}
+            // Используем кастомный инпут, чтобы получить реф на реальный <input>
+            customInput={
+              <DateInput
+                ref={dateInputRef}
+                inputMode={isMobile && !allowTyping ? "none" : "text"}
+                className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            }
           />
         </label>
 
@@ -228,6 +286,8 @@ export function GraphContent() {
 
 // "use client";
 // import { useMemo, useState } from "react";
+// import DatePicker from "react-datepicker";
+// import { ru } from "date-fns/locale/ru";
 
 // type RawPoint = {
 //   id: string;
@@ -258,7 +318,7 @@ export function GraphContent() {
 //   new Date(year, month1to12, 0).getDate();
 
 // export function GraphContent() {
-//   const [selectedDate, setSelectedDate] = useState<string>("");
+//   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 //   const [calories, setCalories] = useState<string>("");
 //   const [points, setPoints] = useState<RawPoint[]>([]);
 //   const [error, setError] = useState<string>("");
@@ -315,26 +375,13 @@ export function GraphContent() {
 //       return;
 //     }
 
-//     // input type="date" -> "YYYY-MM-DD"
-//     const parts = selectedDate.split("-");
-//     if (parts.length !== 3) {
-//       setError("Некорректный формат даты.");
-//       return;
-//     }
-
-//     const [yStr, mStr, dStr] = parts;
-//     const yearValue = Number(yStr);
-//     const monthValue = Number(mStr);
-//     const dayValue = Number(dStr);
+//     const yearValue = selectedDate.getFullYear();
+//     const monthValue = selectedDate.getMonth() + 1; // 0..11 -> 1..12
+//     const dayValue = selectedDate.getDate();
 //     const caloriesValue = Number(calories);
 
-//     if (
-//       Number.isNaN(yearValue) ||
-//       Number.isNaN(monthValue) ||
-//       Number.isNaN(dayValue) ||
-//       Number.isNaN(caloriesValue)
-//     ) {
-//       setError("Некорректный ввод.");
+//     if (Number.isNaN(caloriesValue)) {
+//       setError("Некорректный ввод калорий.");
 //       return;
 //     }
 
@@ -367,7 +414,7 @@ export function GraphContent() {
 //     setPoints((prev) => [...prev, nextPoint]);
 //     setError("");
 //     setCalories("");
-//     // Дату оставляем, чтобы удобно добавлять несколько точек подряд
+//     // Дату оставляем, чтобы можно было добавлять несколько точек подряд
 //   };
 
 //   return (
@@ -377,11 +424,19 @@ export function GraphContent() {
 //       <div className="flex flex-wrap items-end gap-4">
 //         <label className="flex flex-col text-sm text-slate-700">
 //           Дата
-//           <input
-//             type="date"
+//           <DatePicker
+//             selected={selectedDate}
+//             onChange={(d) => setSelectedDate(d)}
+//             placeholderText="Выберите дату"
+//             dateFormat="dd-MM-yyyy"
+//             locale={ru}
+//             showMonthDropdown
+//             showYearDropdown
+//             dropdownMode="select"
+//             showPopperArrow={false}
+//             isClearable
+//             todayButton="Сегодня"
 //             className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-//             value={selectedDate}
-//             onChange={(e) => setSelectedDate(e.target.value)}
 //           />
 //         </label>
 
