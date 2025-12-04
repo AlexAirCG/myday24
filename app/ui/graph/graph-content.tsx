@@ -11,6 +11,14 @@ type RawPoint = {
   calories: number; // 0..5000
 };
 
+type NavigatorWithUAData = Navigator & {
+  userAgentData?: {
+    mobile?: boolean;
+    platform?: string;
+    // можно добавить нужные поля по мере необходимости
+  };
+};
+
 const DAY_PIXEL_STEP = 10;
 const GRAPH_HEIGHT = 300;
 const GRAPH_TOP_PADDING = 10;
@@ -48,14 +56,16 @@ const DateInput = forwardRef<
 DateInput.displayName = "DateInput";
 
 // вне компонента — обычная функция (без хуков)
-const detectMobile = () => {
+const detectMobile = (): boolean => {
   if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  const uaDataMobile = (navigator as any).userAgentData?.mobile ?? false;
+
+  const nav = navigator as NavigatorWithUAData;
+
+  const ua = nav.userAgent || "";
+  const uaDataMobile = Boolean(nav.userAgentData?.mobile);
   const isUAMobile =
     /Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile/i.test(ua);
-  const hasTouch =
-    "maxTouchPoints" in navigator && navigator.maxTouchPoints > 1;
+  const hasTouch = "maxTouchPoints" in nav && nav.maxTouchPoints > 1;
   const smallViewport =
     typeof window !== "undefined" &&
     Math.min(window.innerWidth, window.innerHeight) < 768;
@@ -63,7 +73,6 @@ const detectMobile = () => {
   return uaDataMobile || isUAMobile || (hasTouch && smallViewport);
 };
 
-// кастомный хук — можно вызывать хуки
 function useIsMobile() {
   const [mobile, setMobile] = useState(false);
   useEffect(() => {
