@@ -1,4 +1,5 @@
 "use client";
+import type { FocusEvent } from "react";
 import { useMemo, useState } from "react";
 import DatePicker from "react-datepicker";
 import { ru } from "date-fns/locale/ru";
@@ -141,6 +142,12 @@ export function GraphContent() {
           <DatePicker
             selected={selectedDate}
             onChange={(d) => setSelectedDate(d)}
+            onFocus={(event: FocusEvent<HTMLInputElement>) => {
+              // На мобильных устройствах предотвращаем появление клавиатуры,
+              // оставляя только всплывающий календарь
+              event.target.blur();
+            }}
+            // readOnly
             placeholderText="Выберите дату"
             dateFormat="dd-MM-yyyy"
             locale={ru}
