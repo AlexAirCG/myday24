@@ -1,5 +1,5 @@
 "use client";
-import type { FocusEvent } from "react";
+import { forwardRef } from "react";
 import { useMemo, useState } from "react";
 import DatePicker from "react-datepicker";
 import { ru } from "date-fns/locale/ru";
@@ -132,8 +132,21 @@ export function GraphContent() {
     // Дату оставляем, чтобы можно было добавлять несколько точек подряд
   };
 
-  const isTouch =
-    typeof window !== "undefined" && matchMedia("(pointer: coarse)").matches;
+  // кастомный инпут с readOnly через customInput:
+  const DateInput = forwardRef<
+    HTMLInputElement,
+    React.InputHTMLAttributes<HTMLInputElement>
+  >(({ value, onClick, placeholder }, ref) => (
+    <input
+      ref={ref}
+      value={(value as string) ?? ""}
+      onClick={onClick}
+      placeholder={placeholder}
+      readOnly
+      className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+    />
+  ));
+  DateInput.displayName = "DateInput";
 
   return (
     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
@@ -154,8 +167,7 @@ export function GraphContent() {
             showPopperArrow={false}
             isClearable
             todayButton="Сегодня"
-            readOnly={isTouch}
-            className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            customInput={<DateInput />}
           />
         </label>
 
