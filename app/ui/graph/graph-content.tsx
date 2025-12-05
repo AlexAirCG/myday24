@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useRef, useState, forwardRef } from "react";
+import type { FocusEvent } from "react";
+import { useMemo, useState } from "react";
 import DatePicker from "react-datepicker";
 import { ru } from "date-fns/locale/ru";
 
@@ -10,16 +11,6 @@ type RawPoint = {
   day: number; // 1..31 (зависит от месяца)
   calories: number; // 0..5000
 };
-
-const isMobileUA = () =>
-  typeof navigator !== "undefined" &&
-  /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-
-const DateInput = forwardRef<
-  HTMLInputElement,
-  React.InputHTMLAttributes<HTMLInputElement>
->((props, ref) => <input {...props} ref={ref} />);
-DateInput.displayName = "DateInput";
 
 const DAY_PIXEL_STEP = 10;
 const GRAPH_HEIGHT = 300;
@@ -46,10 +37,6 @@ export function GraphContent() {
   const [calories, setCalories] = useState<string>("");
   const [points, setPoints] = useState<RawPoint[]>([]);
   const [error, setError] = useState<string>("");
-
-  const [allowTyping, setAllowTyping] = useState(false); // можно ли печатать
-  const [calendarOpen, setCalendarOpen] = useState(false); // открыт ли календарь
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Минимальная дата среди всех точек (UTC)
   const minDateMs = useMemo(() => {
@@ -144,55 +131,9 @@ export function GraphContent() {
     setCalories("");
     // Дату оставляем, чтобы можно было добавлять несколько точек подряд
   };
-  // оборачиваем DatePicker в элемент и ловим ref через проп forwardedRef
-  const CustomDatePicker = () => {
-    const isMobile = isMobileUA();
-    const shouldBlockInput = isMobile && !allowTyping;
 
-    return (
-      <DatePicker
-        selected={selectedDate}
-        onChange={(d) => setSelectedDate(d)}
-        placeholderText="Выберите дату"
-        dateFormat="dd-MM-yyyy"
-        locale={ru}
-        showMonthDropdown
-        showYearDropdown
-        dropdownMode="select"
-        showPopperArrow={false}
-        isClearable
-        todayButton="Сегодня"
-        // отслеживаем открытие/закрытие календаря
-        onCalendarOpen={() => setCalendarOpen(true)}
-        onCalendarClose={() => {
-          setCalendarOpen(false);
-          setAllowTyping(false); // при закрытии снова запрещаем ввод
-        }}
-        // если календарь уже открыт и пользователь снова тапнул по полю —
-        // разрешаем ввод и принудительно открываем клавиатуру
-        onInputClick={() => {
-          if (isMobile && calendarOpen && !allowTyping) {
-            setAllowTyping(true);
-            // Чтобы ОС показала клавиатуру — делаем blur → focus
-            requestAnimationFrame(() => {
-              const el = inputRef.current;
-              if (!el) return;
-              el.blur();
-              setTimeout(() => el.focus(), 0);
-            });
-          }
-        }}
-        customInput={
-          <DateInput
-            ref={inputRef}
-            readOnly={shouldBlockInput}
-            inputMode={shouldBlockInput ? "none" : "text"}
-            className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          />
-        }
-      />
-    );
-  };
+  const isTouch =
+    typeof window !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
   return (
     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
@@ -201,7 +142,21 @@ export function GraphContent() {
       <div className="flex flex-wrap items-end gap-4">
         <label className="flex flex-col text-sm text-slate-700">
           Дата
-          <CustomDatePicker />
+          <DatePicker
+            selected={selectedDate}
+            onChange={(d) => setSelectedDate(d)}
+            placeholderText="Выберите дату"
+            dateFormat="dd-MM-yyyy"
+            locale={ru}
+            showMonthDropdown
+            showYearDropdown
+            dropdownMode="select"
+            showPopperArrow={false}
+            isClearable
+            todayButton="Сегодня"
+            readOnly={isTouch}
+            className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
         </label>
 
         <label className="flex flex-col text-sm text-slate-700">
@@ -421,12 +376,6 @@ export function GraphContent() {
 //           <DatePicker
 //             selected={selectedDate}
 //             onChange={(d) => setSelectedDate(d)}
-//             // onFocus={(event: FocusEvent<HTMLInputElement>) => {
-//             //   // На мобильных устройствах предотвращаем появление клавиатуры,
-//             //   // оставляя только всплывающий календарь
-//             //   event.target.blur();
-//             // }}
-//             // readOnly
 //             placeholderText="Выберите дату"
 //             dateFormat="dd-MM-yyyy"
 //             locale={ru}
