@@ -267,9 +267,20 @@ export function GraphContent() {
 
       setCalories("");
       // Дату оставляем, чтобы можно было добавлять подряд
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setError(e?.message ?? "Не удалось сохранить точку.");
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === "string"
+          ? e
+          : (typeof e === "object" &&
+              e !== null &&
+              "message" in e &&
+              typeof (e as { message?: unknown }).message === "string" &&
+              (e as { message?: string }).message) ||
+            "Не удалось сохранить точку.";
+      setError(message);
     } finally {
       setLoading(false);
     }
