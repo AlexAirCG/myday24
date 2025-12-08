@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 export default function Page() {
   return (
-    <div>
+    <div className="flex h-full flex-col overflow-y-auto overscroll-contain">
       <GraphContent />
     </div>
   );

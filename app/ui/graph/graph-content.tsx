@@ -3,6 +3,11 @@ import { forwardRef } from "react";
 import { useMemo, useState, useRef, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import { ru } from "date-fns/locale/ru";
+import {
+  loadGraphPoints,
+  upsertGraphPoint,
+  type GraphPoint as StoredPoint,
+} from "@/app/lib/actions";
 
 type RawPoint = {
   id: string;
@@ -18,46 +23,78 @@ const GRAPH_TOP_PADDING = 10;
 const GRAPH_BOTTOM_PADDING = 10;
 
 const DEFAULT_GRAPH_WIDTH = 600;
-const CALORIES_MIN = 1000;
-const CALORIES_MAX = 3500;
+const CALORIES_MIN = 1200;
+const CALORIES_MAX = 3300;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const createId = () =>
-  typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2);
+// const createId = () =>
+//   typeof crypto !== "undefined" && crypto.randomUUID
+//     ? crypto.randomUUID()
+//     : Math.random().toString(36).slice(2);
 
 // Количество дней в месяце
 const daysInMonth = (year: number, month1to12: number) =>
   new Date(year, month1to12, 0).getDate();
+
+function isFiniteNum(n: unknown): n is number {
+  return typeof n === "number" && Number.isFinite(n);
+}
+
+function toUtcMs(y: number, m1to12: number, d: number) {
+  if (!Number.isInteger(y) || !Number.isInteger(m1to12) || !Number.isInteger(d))
+    return NaN;
+  if (m1to12 < 1 || m1to12 > 12) return NaN;
+  const dim = daysInMonth(y, m1to12);
+  if (d < 1 || d > dim) return NaN;
+  return Date.UTC(y, m1to12 - 1, d);
+}
 
 export function GraphContent() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [calories, setCalories] = useState<string>("");
   const [points, setPoints] = useState<RawPoint[]>([]);
   const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // загрузка точек при монтировании
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await loadGraphPoints();
+        if (!cancelled) {
+          setPoints(data);
+        }
+      } catch (e) {
+        console.error("Failed to load graph points:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // измерение ширины контейнера
   const scrollRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(DEFAULT_GRAPH_WIDTH);
 
+  // измерение ширины контейнера
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
 
-    const update = () => setContainerWidth(el.clientWidth);
+    const update = () =>
+      setContainerWidth(
+        Number.isFinite(el.clientWidth) && el.clientWidth > 0
+          ? el.clientWidth
+          : DEFAULT_GRAPH_WIDTH
+      );
 
-    // Первичное измерение
     update();
-
-    // Следим за изменением размеров контейнера
     const ro = new ResizeObserver(() => update());
     ro.observe(el);
-
-    // На всякий случай — обновление при ресайзе окна
     window.addEventListener("resize", update);
-
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", update);
@@ -67,10 +104,12 @@ export function GraphContent() {
   // Минимальная дата среди всех точек (UTC)
   const minDateMs = useMemo(() => {
     if (!points.length) return null;
-    return Math.min(...points.map((p) => Date.UTC(p.year, p.month - 1, p.day)));
+    const times = points
+      .map((p) => toUtcMs(p.year, p.month, p.day))
+      .filter(isFiniteNum);
+    return times.length ? Math.min(...times) : null;
   }, [points]);
 
-  // Динамический шаг по Y (пикселей на 1 калорию)
   const caloriePixelStep = useMemo(() => {
     const drawableHeight =
       GRAPH_HEIGHT - GRAPH_TOP_PADDING - GRAPH_BOTTOM_PADDING;
@@ -78,43 +117,99 @@ export function GraphContent() {
     return drawableHeight / range;
   }, []);
 
-  // Функция перевода калорий в координату Y внутри SVG
-  const yForCalories = (c: number) =>
-    GRAPH_HEIGHT - GRAPH_BOTTOM_PADDING - (c - CALORIES_MIN) * caloriePixelStep;
+  // const yForCalories = (c: number) =>
+  //   GRAPH_HEIGHT - GRAPH_BOTTOM_PADDING - (c - CALORIES_MIN) * caloriePixelStep;
 
-  // Координаты и сортировка по времени (год-месяц-день)
   const pointsWithCoords = useMemo(() => {
     if (!points.length) return [];
 
-    return points
-      .map((p) => {
-        const timeMs = Date.UTC(p.year, p.month - 1, p.day);
-        const baseMs = minDateMs ?? timeMs;
-        const daysDiff = (timeMs - baseMs) / MS_PER_DAY; // целое число
+    const result: Array<RawPoint & { x: number; y: number }> = [];
 
-        const x = daysDiff * DAY_PIXEL_STEP;
+    for (const p of points) {
+      const timeMs = toUtcMs(p.year, p.month, p.day);
+      if (!isFiniteNum(timeMs)) continue;
 
-        const y =
-          GRAPH_HEIGHT -
-          GRAPH_BOTTOM_PADDING -
-          (p.calories - CALORIES_MIN) * caloriePixelStep;
+      const baseMs =
+        minDateMs !== null && isFiniteNum(minDateMs) ? minDateMs : timeMs;
 
-        return { ...p, x, y };
-      })
-      .sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        if (a.month !== b.month) return a.month - b.month;
-        return a.day - b.day;
-      });
+      const daysDiff = (timeMs - baseMs) / MS_PER_DAY;
+      const x = daysDiff * DAY_PIXEL_STEP;
+
+      // на всякий случай приведём калории к числу
+      const c =
+        typeof p.calories === "number" ? p.calories : Number(p.calories);
+      if (!isFiniteNum(c)) continue;
+
+      const y =
+        GRAPH_HEIGHT -
+        GRAPH_BOTTOM_PADDING -
+        (c - CALORIES_MIN) * caloriePixelStep;
+
+      if (!isFiniteNum(x) || !isFiniteNum(y)) continue;
+
+      result.push({ ...p, x, y });
+    }
+
+    result.sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      if (a.month !== b.month) return a.month - b.month;
+      return a.day - b.day;
+    });
+
+    return result;
   }, [points, minDateMs, caloriePixelStep]);
 
-  // const graphWidth = useMemo(() => {
-  //   if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
-  //   const last = pointsWithCoords[pointsWithCoords.length - 1];
-  //   return Math.max(last.x + DAY_PIXEL_STEP, DEFAULT_GRAPH_WIDTH);
-  // }, [pointsWithCoords]);
+  // NEW: хелпер — ключ даты
+  // const dateKey = (y: number, m: number, d: number) =>
+  //   `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
-  const handleAddPoint = () => {
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   (async () => {
+  //     try {
+  //       const data = await loadGraphPoints();
+  //       if (!cancelled) {
+  //         // ВАЖНО: мерджим с текущим состоянием, чтобы не потерять локальные добавления
+  //         setPoints((prev) => {
+  //           const map = new Map(
+  //             prev.map((p) => [dateKey(p.year, p.month, p.day), p])
+  //           );
+  //           for (const p of data) {
+  //             const key = dateKey(p.year, p.month, p.day);
+  //             if (!map.has(key)) {
+  //               map.set(key, p); // добавляем только те, которых нет локально
+  //             }
+  //           }
+  //           return Array.from(map.values());
+  //         });
+  //       }
+  //     } catch (e) {
+  //       console.error("Failed to load graph points:", e);
+  //     }
+  //   })();
+  //   return () => {
+  //     cancelled = true;
+  //   };
+  // }, []);
+
+  const dateKey = (y: number, m: number, d: number) =>
+    `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  // NEW: заменить/добавить точку по дате
+  const upsertLocalPointByDate = (np: RawPoint) => {
+    setPoints((prev) => {
+      const key = dateKey(np.year, np.month, np.day);
+      const idx = prev.findIndex(
+        (p) => dateKey(p.year, p.month, p.day) === key
+      );
+      if (idx === -1) return [...prev, np];
+      const copy = prev.slice();
+      copy[idx] = { ...copy[idx], ...np };
+      return copy;
+    });
+  };
+
+  const handleAddPoint = async () => {
     if (!selectedDate || !calories) {
       setError("Выберите дату и укажите значение.");
       return;
@@ -148,18 +243,36 @@ export function GraphContent() {
       return;
     }
 
-    const nextPoint: RawPoint = {
-      id: createId(),
-      year: yearValue,
-      month: monthValue,
-      day: dayValue,
-      calories: caloriesValue,
-    };
+    try {
+      setLoading(true);
+      setError("");
 
-    setPoints((prev) => [...prev, nextPoint]);
-    setError("");
-    setCalories("");
-    // Дату оставляем, чтобы можно было добавлять несколько точек подряд
+      // Сохраняем на сервер (UPSERT по дате)
+
+      const saved = await upsertGraphPoint({
+        year: yearValue,
+        month: monthValue,
+        day: dayValue,
+        calories: caloriesValue,
+      });
+
+      // Синхронизируем локальное состояние — заменить/добавить по дате
+      upsertLocalPointByDate({
+        id: saved.id,
+        year: saved.year,
+        month: saved.month,
+        day: saved.day,
+        calories: saved.calories,
+      });
+
+      setCalories("");
+      // Дату оставляем, чтобы можно было добавлять подряд
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message ?? "Не удалось сохранить точку.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // кастомный инпут с readOnly через customInput:
@@ -178,30 +291,61 @@ export function GraphContent() {
   ));
   DateInput.displayName = "DateInput";
 
-  // Диапазоны фона по оси Y
-  const bands = [
-    { from: 1000, to: 2100, fill: "green", opacity: 0.4 }, // зелёный
-    { from: 2100, to: 2600, fill: "yellow", opacity: 0.4 }, // жёлтый
-    { from: 2600, to: 3500, fill: "red", opacity: 0.4 }, // красный
-  ] as const;
+  const gradientStops = useMemo(() => {
+    const range = CALORIES_MAX - CALORIES_MIN;
+    const redToYellowPercent = 100 - ((2300 - CALORIES_MIN) / range) * 100;
+    const yellowToGreenPercent = 100 - ((2000 - CALORIES_MIN) / range) * 100;
+    const blendZone = 6;
 
-  // Вспомогательная функция для высоты прямоугольника по паре значений
-  const bandRect = (from: number, to: number) => {
-    // На всякий случай — обрезаем диапазоны по общим min/max
-    const a = Math.max(CALORIES_MIN, Math.min(from, CALORIES_MAX));
-    const b = Math.max(CALORIES_MIN, Math.min(to, CALORIES_MAX));
-    const yTop = yForCalories(Math.max(a, b));
-    const yBottom = yForCalories(Math.min(a, b));
-    return { y: yTop, height: yBottom - yTop };
-  };
+    return [
+      { offset: "0%", color: "rgb(239, 68, 68)", opacity: 0.7 },
+      {
+        offset: `${Math.max(0, redToYellowPercent - blendZone)}%`,
+        color: "rgb(239, 68, 68)",
+        opacity: 0.7,
+      },
+      {
+        offset: `${redToYellowPercent}%`,
+        color: "rgb(234, 179, 8)",
+        opacity: 0.7,
+      },
+      {
+        offset: `${Math.min(100, redToYellowPercent + blendZone)}%`,
+        color: "rgb(234, 179, 8)",
+        opacity: 0.7,
+      },
+      {
+        offset: `${Math.max(0, yellowToGreenPercent - blendZone)}%`,
+        color: "rgb(234, 179, 8)",
+        opacity: 0.7,
+      },
+      {
+        offset: `${yellowToGreenPercent}%`,
+        color: "rgb(34, 197, 94)",
+        opacity: 0.7,
+      },
+      {
+        offset: `${Math.min(100, yellowToGreenPercent + blendZone)}%`,
+        color: "rgb(34, 197, 94)",
+        opacity: 0.7,
+      },
+      { offset: "100%", color: "rgb(34, 197, 94)", opacity: 0.7 },
+    ];
+  }, []);
 
   const contentWidth = useMemo(() => {
     if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
     const last = pointsWithCoords[pointsWithCoords.length - 1];
-    return Math.max(last.x + DAY_PIXEL_STEP, DEFAULT_GRAPH_WIDTH);
+    const w = last.x + DAY_PIXEL_STEP;
+    return Number.isFinite(w)
+      ? Math.max(w, DEFAULT_GRAPH_WIDTH)
+      : DEFAULT_GRAPH_WIDTH;
   }, [pointsWithCoords]);
 
-  const graphWidth = Math.max(contentWidth, containerWidth);
+  const graphWidth =
+    Number.isFinite(contentWidth) && Number.isFinite(containerWidth)
+      ? Math.max(contentWidth, containerWidth)
+      : DEFAULT_GRAPH_WIDTH;
 
   return (
     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
@@ -233,7 +377,7 @@ export function GraphContent() {
             min={CALORIES_MIN}
             max={CALORIES_MAX}
             className="mt-1 w-48 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            placeholder={`Введите значение (${CALORIES_MIN}-${CALORIES_MAX})`}
+            placeholder="ккал"
             value={calories}
             onChange={(event) => setCalories(event.target.value)}
           />
@@ -241,10 +385,11 @@ export function GraphContent() {
 
         <button
           type="button"
-          className="inline-flex items-center rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline  focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+          className="inline-flex items-center rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60"
           onClick={handleAddPoint}
+          disabled={loading}
         >
-          Добавить
+          {loading ? "Сохранение..." : "Добавить"}
         </button>
       </div>
 
@@ -252,7 +397,6 @@ export function GraphContent() {
         <p className="text-sm font-medium text-red-600">{error}</p>
       ) : null}
 
-      {/* Было bg-yellow-200 — убрали, чтобы фон формировали полосы в SVG */}
       <div
         ref={scrollRef}
         className="relative h-[300px] w-full overflow-auto rounded-lg bg-white"
@@ -263,25 +407,34 @@ export function GraphContent() {
           height={GRAPH_HEIGHT}
           viewBox={`0 0 ${graphWidth} ${GRAPH_HEIGHT}`}
         >
-          {/* Фоновые полосы по уровням калорий */}
-          <g aria-hidden="true">
-            {bands.map((b, i) => {
-              const { y, height } = bandRect(b.from, b.to);
-              return (
-                <rect
-                  key={`band-${i}`}
-                  x={0}
-                  y={y}
-                  width={graphWidth}
-                  height={height}
-                  fill={b.fill}
-                  fillOpacity={b.opacity}
+          <defs>
+            <linearGradient
+              id="calorieGradient"
+              x1="0%"
+              y1="0%"
+              x2="0%"
+              y2="100%"
+            >
+              {gradientStops.map((stop, i) => (
+                <stop
+                  key={i}
+                  offset={stop.offset}
+                  stopColor={stop.color}
+                  stopOpacity={stop.opacity}
                 />
-              );
-            })}
-          </g>
+              ))}
+            </linearGradient>
+          </defs>
 
-          {/* Линии */}
+          <rect
+            x={0}
+            y={0}
+            width={graphWidth}
+            height={GRAPH_HEIGHT}
+            fill="url(#calorieGradient)"
+            aria-hidden="true"
+          />
+
           {pointsWithCoords.slice(1).map((point, index) => {
             const previous = pointsWithCoords[index];
             return (
@@ -291,20 +444,19 @@ export function GraphContent() {
                 y1={previous.y}
                 x2={point.x}
                 y2={point.y}
-                stroke="rgb(59 130 246)"
+                stroke="rgb(31, 92, 184)"
                 strokeWidth={4}
               />
             );
           })}
 
-          {/* Точки */}
           {pointsWithCoords.map((point) => (
             <g key={point.id}>
               <circle
                 cx={point.x}
                 cy={point.y}
-                r={4}
-                fill="rgb(59 130 246)"
+                r={4.5}
+                fill="rgb(31, 92, 184)"
                 strokeWidth={1.5}
               />
               <title>{`Дата: ${String(point.day).padStart(2, "0")}.${String(
@@ -320,9 +472,10 @@ export function GraphContent() {
   );
 }
 
+// orig
 // "use client";
 // import { forwardRef } from "react";
-// import { useMemo, useState } from "react";
+// import { useMemo, useState, useRef, useEffect } from "react";
 // import DatePicker from "react-datepicker";
 // import { ru } from "date-fns/locale/ru";
 
@@ -340,8 +493,8 @@ export function GraphContent() {
 // const GRAPH_BOTTOM_PADDING = 10;
 
 // const DEFAULT_GRAPH_WIDTH = 600;
-// const CALORIES_MIN = 1000;
-// const CALORIES_MAX = 4000;
+// const CALORIES_MIN = 1200;
+// const CALORIES_MAX = 3300;
 
 // const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -359,6 +512,32 @@ export function GraphContent() {
 //   const [calories, setCalories] = useState<string>("");
 //   const [points, setPoints] = useState<RawPoint[]>([]);
 //   const [error, setError] = useState<string>("");
+
+//   // измерение ширины контейнера
+//   const scrollRef = useRef<HTMLDivElement>(null);
+//   const [containerWidth, setContainerWidth] = useState(DEFAULT_GRAPH_WIDTH);
+
+//   useEffect(() => {
+//     const el = scrollRef.current;
+//     if (!el) return;
+
+//     const update = () => setContainerWidth(el.clientWidth);
+
+//     // Первичное измерение
+//     update();
+
+//     // Следим за изменением размеров контейнера
+//     const ro = new ResizeObserver(() => update());
+//     ro.observe(el);
+
+//     // На всякий случай — обновление при ресайзе окна
+//     window.addEventListener("resize", update);
+
+//     return () => {
+//       ro.disconnect();
+//       window.removeEventListener("resize", update);
+//     };
+//   }, []);
 
 //   // Минимальная дата среди всех точек (UTC)
 //   const minDateMs = useMemo(() => {
@@ -404,12 +583,6 @@ export function GraphContent() {
 //       });
 //   }, [points, minDateMs, caloriePixelStep]);
 
-//   const graphWidth = useMemo(() => {
-//     if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
-//     const last = pointsWithCoords[pointsWithCoords.length - 1];
-//     return Math.max(last.x + DAY_PIXEL_STEP, DEFAULT_GRAPH_WIDTH);
-//   }, [pointsWithCoords]);
-
 //   const handleAddPoint = () => {
 //     if (!selectedDate || !calories) {
 //       setError("Выберите дату и укажите значение.");
@@ -474,22 +647,62 @@ export function GraphContent() {
 //   ));
 //   DateInput.displayName = "DateInput";
 
-//   // Диапазоны фона по оси Y
-//   const bands = [
-//     { from: 1000, to: 1900, fill: "green", opacity: 0.5 }, // зелёный
-//     { from: 1900, to: 2500, fill: "yellow", opacity: 0.5 }, // жёлтый
-//     { from: 2500, to: 4000, fill: "red", opacity: 0.5 }, // красный
-//   ] as const;
+//   // Градиент для плавного перехода между цветами
+//   // В SVG координаты идут сверху вниз: 0% = верх (высокие калории, красный), 100% = низ (низкие калории, зеленый)
+//   const gradientStops = useMemo(() => {
+//     const range = CALORIES_MAX - CALORIES_MIN; // 3500 - 1200 = 2300
 
-//   // Вспомогательная функция для высоты прямоугольника по паре значений
-//   const bandRect = (from: number, to: number) => {
-//     // На всякий случай — обрезаем диапазоны по общим min/max
-//     const a = Math.max(CALORIES_MIN, Math.min(from, CALORIES_MAX));
-//     const b = Math.max(CALORIES_MIN, Math.min(to, CALORIES_MAX));
-//     const yTop = yForCalories(Math.max(a, b));
-//     const yBottom = yForCalories(Math.min(a, b));
-//     return { y: yTop, height: yBottom - yTop };
-//   };
+//     // Вычисляем позиции переходов в процентах от верха (0%) к низу (100%)
+//     // Инвертируем проценты: 0% = 3500 калорий (верх, красный), 100% = 1200 калорий (низ, зеленый)
+//     const redToYellowPercent = 100 - ((2300 - CALORIES_MIN) / range) * 100; // ~39.13% (от верха)
+//     const yellowToGreenPercent = 100 - ((2000 - CALORIES_MIN) / range) * 100; // ~60.87% (от верха)
+
+//     // Добавляем зону смешивания для плавного перехода (3% от общей высоты)
+//     const blendZone = 6;
+
+//     return [
+//       { offset: "0%", color: "rgb(239, 68, 68)", opacity: 0.7 }, // red (верх, 3500 калорий)
+//       {
+//         offset: `${Math.max(0, redToYellowPercent - blendZone)}%`,
+//         color: "rgb(239, 68, 68)",
+//         opacity: 0.7,
+//       }, // red
+//       {
+//         offset: `${redToYellowPercent}%`,
+//         color: "rgb(234, 179, 8)",
+//         opacity: 0.7,
+//       }, // смешивание red->yellow
+//       {
+//         offset: `${Math.min(100, redToYellowPercent + blendZone)}%`,
+//         color: "rgb(234, 179, 8)",
+//         opacity: 0.7,
+//       }, // yellow
+//       {
+//         offset: `${Math.max(0, yellowToGreenPercent - blendZone)}%`,
+//         color: "rgb(234, 179, 8)",
+//         opacity: 0.7,
+//       }, // yellow
+//       {
+//         offset: `${yellowToGreenPercent}%`,
+//         color: "rgb(34, 197, 94)",
+//         opacity: 0.7,
+//       }, // смешивание yellow->green
+//       {
+//         offset: `${Math.min(100, yellowToGreenPercent + blendZone)}%`,
+//         color: "rgb(34, 197, 94)",
+//         opacity: 0.7,
+//       }, // green
+//       { offset: "100%", color: "rgb(34, 197, 94)", opacity: 0.7 }, // green (низ, 1200 калорий)
+//     ];
+//   }, []);
+
+//   const contentWidth = useMemo(() => {
+//     if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
+//     const last = pointsWithCoords[pointsWithCoords.length - 1];
+//     return Math.max(last.x + DAY_PIXEL_STEP, DEFAULT_GRAPH_WIDTH);
+//   }, [pointsWithCoords]);
+
+//   const graphWidth = Math.max(contentWidth, containerWidth);
 
 //   return (
 //     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
@@ -540,523 +753,45 @@ export function GraphContent() {
 //         <p className="text-sm font-medium text-red-600">{error}</p>
 //       ) : null}
 
-//       {/* Было bg-yellow-200 — убрали, чтобы фон формировали полосы в SVG */}
-//       <div className="relative h-[300px] w-full overflow-auto rounded-lg bg-white">
+//       <div
+//         ref={scrollRef}
+//         className="relative h-[300px] w-full overflow-auto rounded-lg bg-white"
+//       >
 //         <svg
 //           className="h-full"
 //           width={graphWidth}
 //           height={GRAPH_HEIGHT}
 //           viewBox={`0 0 ${graphWidth} ${GRAPH_HEIGHT}`}
 //         >
-//           {/* Фоновые полосы по уровням калорий */}
-//           <g aria-hidden="true">
-//             {bands.map((b, i) => {
-//               const { y, height } = bandRect(b.from, b.to);
-//               return (
-//                 <rect
-//                   key={`band-${i}`}
-//                   x={0}
-//                   y={y}
-//                   width={graphWidth}
-//                   height={height}
-//                   fill={b.fill}
-//                   fillOpacity={b.opacity}
+//           <defs>
+//             <linearGradient
+//               id="calorieGradient"
+//               x1="0%"
+//               y1="0%"
+//               x2="0%"
+//               y2="100%"
+//             >
+//               {gradientStops.map((stop, i) => (
+//                 <stop
+//                   key={i}
+//                   offset={stop.offset}
+//                   stopColor={stop.color}
+//                   stopOpacity={stop.opacity}
 //                 />
-//               );
-//             })}
-//           </g>
+//               ))}
+//             </linearGradient>
+//           </defs>
 
-//           {/* Линии */}
-//           {pointsWithCoords.slice(1).map((point, index) => {
-//             const previous = pointsWithCoords[index];
-//             return (
-//               <line
-//                 key={`${point.id}-line`}
-//                 x1={previous.x}
-//                 y1={previous.y}
-//                 x2={point.x}
-//                 y2={point.y}
-//                 stroke="rgb(59 130 246)"
-//                 strokeWidth={4}
-//               />
-//             );
-//           })}
-
-//           {/* Точки */}
-//           {pointsWithCoords.map((point) => (
-//             <g key={point.id}>
-//               <circle
-//                 cx={point.x}
-//                 cy={point.y}
-//                 r={4}
-//                 fill="rgb(59 130 246)"
-//                 strokeWidth={1.5}
-//               />
-//               <title>{`Дата: ${String(point.day).padStart(2, "0")}.${String(
-//                 point.month
-//               ).padStart(2, "0")}.${point.year}, значение: ${
-//                 point.calories
-//               }`}</title>
-//             </g>
-//           ))}
-//         </svg>
-//       </div>
-//     </section>
-//   );
-// }
-
-// "use client";
-// import { forwardRef } from "react";
-// import { useMemo, useState } from "react";
-// import DatePicker from "react-datepicker";
-// import { ru } from "date-fns/locale/ru";
-
-// type RawPoint = {
-//   id: string;
-//   year: number;
-//   month: number; // 1..12
-//   day: number; // 1..31 (зависит от месяца)
-//   calories: number; // 0..5000
-// };
-
-// const DAY_PIXEL_STEP = 10;
-// const GRAPH_HEIGHT = 300;
-// const GRAPH_TOP_PADDING = 10;
-// const GRAPH_BOTTOM_PADDING = 10;
-
-// const DEFAULT_GRAPH_WIDTH = 600;
-// const CALORIES_MIN = 1000;
-// const CALORIES_MAX = 4000;
-
-// const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-// const createId = () =>
-//   typeof crypto !== "undefined" && crypto.randomUUID
-//     ? crypto.randomUUID()
-//     : Math.random().toString(36).slice(2);
-
-// // Количество дней в месяце
-// const daysInMonth = (year: number, month1to12: number) =>
-//   new Date(year, month1to12, 0).getDate();
-
-// export function GraphContent() {
-//   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-//   const [calories, setCalories] = useState<string>("");
-//   const [points, setPoints] = useState<RawPoint[]>([]);
-//   const [error, setError] = useState<string>("");
-
-//   // Минимальная дата среди всех точек (UTC)
-//   const minDateMs = useMemo(() => {
-//     if (!points.length) return null;
-//     return Math.min(...points.map((p) => Date.UTC(p.year, p.month - 1, p.day)));
-//   }, [points]);
-
-//   // Динамический шаг по Y (пикселей на 1 калорию)
-//   const caloriePixelStep = useMemo(() => {
-//     const drawableHeight =
-//       GRAPH_HEIGHT - GRAPH_TOP_PADDING - GRAPH_BOTTOM_PADDING;
-//     const range = Math.max(1, CALORIES_MAX - CALORIES_MIN);
-//     return drawableHeight / range;
-//   }, []);
-
-//   // Координаты и сортировка по времени (год-месяц-день)
-//   const pointsWithCoords = useMemo(() => {
-//     if (!points.length) return [];
-
-//     return points
-//       .map((p) => {
-//         const timeMs = Date.UTC(p.year, p.month - 1, p.day);
-//         const baseMs = minDateMs ?? timeMs;
-//         const daysDiff = (timeMs - baseMs) / MS_PER_DAY; // целое число
-
-//         const x = daysDiff * DAY_PIXEL_STEP;
-
-//         const y =
-//           GRAPH_HEIGHT -
-//           GRAPH_BOTTOM_PADDING -
-//           (p.calories - CALORIES_MIN) * caloriePixelStep;
-
-//         return { ...p, x, y };
-//       })
-//       .sort((a, b) => {
-//         if (a.year !== b.year) return a.year - b.year;
-//         if (a.month !== b.month) return a.month - b.month;
-//         return a.day - b.day;
-//       });
-//   }, [points, minDateMs, caloriePixelStep]);
-
-//   const graphWidth = useMemo(() => {
-//     if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
-//     const last = pointsWithCoords[pointsWithCoords.length - 1];
-//     return Math.max(last.x + DAY_PIXEL_STEP, DEFAULT_GRAPH_WIDTH);
-//   }, [pointsWithCoords]);
-
-//   const handleAddPoint = () => {
-//     if (!selectedDate || !calories) {
-//       setError("Выберите дату и укажите значение.");
-//       return;
-//     }
-
-//     const yearValue = selectedDate.getFullYear();
-//     const monthValue = selectedDate.getMonth() + 1; // 0..11 -> 1..12
-//     const dayValue = selectedDate.getDate();
-//     const caloriesValue = Number(calories);
-
-//     if (Number.isNaN(caloriesValue)) {
-//       setError("Некорректный ввод калорий.");
-//       return;
-//     }
-
-//     if (monthValue < 1 || monthValue > 12) {
-//       setError("Некорректный месяц.");
-//       return;
-//     }
-
-//     const dim = daysInMonth(yearValue, monthValue);
-//     if (dayValue < 1 || dayValue > dim) {
-//       setError("Некорректный день месяца.");
-//       return;
-//     }
-
-//     if (caloriesValue < CALORIES_MIN || caloriesValue > CALORIES_MAX) {
-//       setError(
-//         `Значение должно быть в диапазоне ${CALORIES_MIN}-${CALORIES_MAX}.`
-//       );
-//       return;
-//     }
-
-//     const nextPoint: RawPoint = {
-//       id: createId(),
-//       year: yearValue,
-//       month: monthValue,
-//       day: dayValue,
-//       calories: caloriesValue,
-//     };
-
-//     setPoints((prev) => [...prev, nextPoint]);
-//     setError("");
-//     setCalories("");
-//     // Дату оставляем, чтобы можно было добавлять несколько точек подряд
-//   };
-
-//   // кастомный инпут с readOnly через customInput:
-//   const DateInput = forwardRef<
-//     HTMLInputElement,
-//     React.InputHTMLAttributes<HTMLInputElement>
-//   >(({ value, onClick, placeholder }, ref) => (
-//     <input
-//       ref={ref}
-//       value={(value as string) ?? ""}
-//       onClick={onClick}
-//       placeholder={placeholder}
-//       readOnly
-//       className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-//     />
-//   ));
-//   DateInput.displayName = "DateInput";
-
-//   return (
-//     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
-//       <h2 className="text-xl font-semibold text-slate-800">График калорий</h2>
-
-//       <div className="flex flex-wrap items-end gap-4">
-//         <label className="flex flex-col text-sm text-slate-700">
-//           Дата
-//           <DatePicker
-//             selected={selectedDate}
-//             onChange={(d) => setSelectedDate(d)}
-//             placeholderText="Выберите дату"
-//             dateFormat="dd-MM-yyyy"
-//             locale={ru}
-//             showMonthDropdown
-//             showYearDropdown
-//             dropdownMode="select"
-//             showPopperArrow={false}
-//             isClearable
-//             todayButton="Сегодня"
-//             customInput={<DateInput />}
+//           {/* Фоновый градиент с плавными переходами */}
+//           <rect
+//             x={0}
+//             y={0}
+//             width={graphWidth}
+//             height={GRAPH_HEIGHT}
+//             fill="url(#calorieGradient)"
+//             aria-hidden="true"
 //           />
-//         </label>
 
-//         <label className="flex flex-col text-sm text-slate-700">
-//           Потреблённые калории
-//           <input
-//             type="number"
-//             min={CALORIES_MIN}
-//             max={CALORIES_MAX}
-//             className="mt-1 w-48 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-//             placeholder={`Введите значение (${CALORIES_MIN}-${CALORIES_MAX})`}
-//             value={calories}
-//             onChange={(event) => setCalories(event.target.value)}
-//           />
-//         </label>
-
-//         <button
-//           type="button"
-//           className="inline-flex items-center rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline  focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
-//           onClick={handleAddPoint}
-//         >
-//           Добавить
-//         </button>
-//       </div>
-
-//       {error ? (
-//         <p className="text-sm font-medium text-red-600">{error}</p>
-//       ) : null}
-
-//       <div className="relative h-[300px] w-full overflow-auto rounded-lg bg-yellow-200">
-//         <svg
-//           className="h-full"
-//           width={graphWidth}
-//           height={GRAPH_HEIGHT}
-//           viewBox={`0 0 ${graphWidth} ${GRAPH_HEIGHT}`}
-//         >
-//           {/* Линии */}
-//           {pointsWithCoords.slice(1).map((point, index) => {
-//             const previous = pointsWithCoords[index];
-//             return (
-//               <line
-//                 key={`${point.id}-line`}
-//                 x1={previous.x}
-//                 y1={previous.y}
-//                 x2={point.x}
-//                 y2={point.y}
-//                 stroke="rgb(59 130 246)"
-//                 strokeWidth={4}
-//               />
-//             );
-//           })}
-
-//           {/* Точки */}
-//           {pointsWithCoords.map((point) => (
-//             <g key={point.id}>
-//               <circle
-//                 cx={point.x}
-//                 cy={point.y}
-//                 r={4}
-//                 fill="rgb(59 130 246)"
-//                 strokeWidth={1.5}
-//               />
-//               <title>{`Дата: ${String(point.day).padStart(2, "0")}.${String(
-//                 point.month
-//               ).padStart(2, "0")}.${point.year}, значение: ${
-//                 point.calories
-//               }`}</title>
-//             </g>
-//           ))}
-//         </svg>
-//       </div>
-//     </section>
-//   );
-// }
-
-// original
-// "use client";
-// import { forwardRef } from "react";
-// import { useMemo, useState } from "react";
-// import DatePicker from "react-datepicker";
-// import { ru } from "date-fns/locale/ru";
-
-// type RawPoint = {
-//   id: string;
-//   year: number;
-//   month: number; // 1..12
-//   day: number; // 1..31 (зависит от месяца)
-//   calories: number; // 0..5000
-// };
-
-// const DAY_PIXEL_STEP = 10;
-// const GRAPH_HEIGHT = 300;
-// const GRAPH_TOP_PADDING = 10;
-// const GRAPH_BOTTOM_PADDING = 10;
-
-// const DEFAULT_GRAPH_WIDTH = 600;
-// const CALORIES_MIN = 1000;
-// const CALORIES_MAX = 4000;
-
-// const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-// const createId = () =>
-//   typeof crypto !== "undefined" && crypto.randomUUID
-//     ? crypto.randomUUID()
-//     : Math.random().toString(36).slice(2);
-
-// // Количество дней в месяце
-// const daysInMonth = (year: number, month1to12: number) =>
-//   new Date(year, month1to12, 0).getDate();
-
-// export function GraphContent() {
-//   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-//   const [calories, setCalories] = useState<string>("");
-//   const [points, setPoints] = useState<RawPoint[]>([]);
-//   const [error, setError] = useState<string>("");
-
-//   // Минимальная дата среди всех точек (UTC)
-//   const minDateMs = useMemo(() => {
-//     if (!points.length) return null;
-//     return Math.min(...points.map((p) => Date.UTC(p.year, p.month - 1, p.day)));
-//   }, [points]);
-
-//   // Динамический шаг по Y (пикселей на 1 калорию)
-//   const caloriePixelStep = useMemo(() => {
-//     const drawableHeight =
-//       GRAPH_HEIGHT - GRAPH_TOP_PADDING - GRAPH_BOTTOM_PADDING;
-//     const range = Math.max(1, CALORIES_MAX - CALORIES_MIN);
-//     return drawableHeight / range;
-//   }, []);
-
-//   // Координаты и сортировка по времени (год-месяц-день)
-//   const pointsWithCoords = useMemo(() => {
-//     if (!points.length) return [];
-
-//     return points
-//       .map((p) => {
-//         const timeMs = Date.UTC(p.year, p.month - 1, p.day);
-//         const baseMs = minDateMs ?? timeMs;
-//         const daysDiff = (timeMs - baseMs) / MS_PER_DAY; // целое число
-
-//         const x = daysDiff * DAY_PIXEL_STEP;
-
-//         const y =
-//           GRAPH_HEIGHT -
-//           GRAPH_BOTTOM_PADDING -
-//           (p.calories - CALORIES_MIN) * caloriePixelStep;
-
-//         return { ...p, x, y };
-//       })
-//       .sort((a, b) => {
-//         if (a.year !== b.year) return a.year - b.year;
-//         if (a.month !== b.month) return a.month - b.month;
-//         return a.day - b.day;
-//       });
-//   }, [points, minDateMs, caloriePixelStep]);
-
-//   const graphWidth = useMemo(() => {
-//     if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
-//     const last = pointsWithCoords[pointsWithCoords.length - 1];
-//     return Math.max(last.x + DAY_PIXEL_STEP, DEFAULT_GRAPH_WIDTH);
-//   }, [pointsWithCoords]);
-
-//   const handleAddPoint = () => {
-//     if (!selectedDate || !calories) {
-//       setError("Выберите дату и укажите значение.");
-//       return;
-//     }
-
-//     const yearValue = selectedDate.getFullYear();
-//     const monthValue = selectedDate.getMonth() + 1; // 0..11 -> 1..12
-//     const dayValue = selectedDate.getDate();
-//     const caloriesValue = Number(calories);
-
-//     if (Number.isNaN(caloriesValue)) {
-//       setError("Некорректный ввод калорий.");
-//       return;
-//     }
-
-//     if (monthValue < 1 || monthValue > 12) {
-//       setError("Некорректный месяц.");
-//       return;
-//     }
-
-//     const dim = daysInMonth(yearValue, monthValue);
-//     if (dayValue < 1 || dayValue > dim) {
-//       setError("Некорректный день месяца.");
-//       return;
-//     }
-
-//     if (caloriesValue < CALORIES_MIN || caloriesValue > CALORIES_MAX) {
-//       setError(
-//         `Значение должно быть в диапазоне ${CALORIES_MIN}-${CALORIES_MAX}.`
-//       );
-//       return;
-//     }
-
-//     const nextPoint: RawPoint = {
-//       id: createId(),
-//       year: yearValue,
-//       month: monthValue,
-//       day: dayValue,
-//       calories: caloriesValue,
-//     };
-
-//     setPoints((prev) => [...prev, nextPoint]);
-//     setError("");
-//     setCalories("");
-//     // Дату оставляем, чтобы можно было добавлять несколько точек подряд
-//   };
-
-//   // кастомный инпут с readOnly через customInput:
-//   const DateInput = forwardRef<
-//     HTMLInputElement,
-//     React.InputHTMLAttributes<HTMLInputElement>
-//   >(({ value, onClick, placeholder }, ref) => (
-//     <input
-//       ref={ref}
-//       value={(value as string) ?? ""}
-//       onClick={onClick}
-//       placeholder={placeholder}
-//       readOnly
-//       className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-//     />
-//   ));
-//   DateInput.displayName = "DateInput";
-
-//   return (
-//     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
-//       <h2 className="text-xl font-semibold text-slate-800">График калорий</h2>
-
-//       <div className="flex flex-wrap items-end gap-4">
-//         <label className="flex flex-col text-sm text-slate-700">
-//           Дата
-//           <DatePicker
-//             selected={selectedDate}
-//             onChange={(d) => setSelectedDate(d)}
-//             placeholderText="Выберите дату"
-//             dateFormat="dd-MM-yyyy"
-//             locale={ru}
-//             showMonthDropdown
-//             showYearDropdown
-//             dropdownMode="select"
-//             showPopperArrow={false}
-//             isClearable
-//             todayButton="Сегодня"
-//             customInput={<DateInput />}
-//           />
-//         </label>
-
-//         <label className="flex flex-col text-sm text-slate-700">
-//           Потреблённые калории
-//           <input
-//             type="number"
-//             min={CALORIES_MIN}
-//             max={CALORIES_MAX}
-//             className="mt-1 w-48 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-//             placeholder={`Введите значение (${CALORIES_MIN}-${CALORIES_MAX})`}
-//             value={calories}
-//             onChange={(event) => setCalories(event.target.value)}
-//           />
-//         </label>
-
-//         <button
-//           type="button"
-//           className="inline-flex items-center rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline  focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
-//           onClick={handleAddPoint}
-//         >
-//           Добавить
-//         </button>
-//       </div>
-
-//       {error ? (
-//         <p className="text-sm font-medium text-red-600">{error}</p>
-//       ) : null}
-
-//       <div className="relative h-[300px] w-full overflow-auto rounded-lg bg-yellow-200">
-//         <svg
-//           className="h-full"
-//           width={graphWidth}
-//           height={GRAPH_HEIGHT}
-//           viewBox={`0 0 ${graphWidth} ${GRAPH_HEIGHT}`}
-//         >
 //           {/* Линии */}
 //           {pointsWithCoords.slice(1).map((point, index) => {
 //             const previous = pointsWithCoords[index];

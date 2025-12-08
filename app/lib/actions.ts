@@ -23,8 +23,138 @@ const DeleteSchema = z.object({
   id: z.uuid(),
 });
 
+// Клиентская форма использует 1200..3300, но на сервере оставим разумные лимиты
+const UpsertPointSchema = z
+  .object({
+    year: z.number().int().min(1900).max(2100),
+    month: z.number().int().min(1).max(12),
+    day: z.number().int().min(1).max(31),
+    calories: z.number().int().min(0).max(10000),
+  })
+  .refine(
+    (v) => {
+      // корректность дня для конкретного месяца/года
+      const dim = new Date(v.year, v.month, 0).getDate();
+      return v.day >= 1 && v.day <= dim;
+    },
+    { path: ["day"], message: "Некорректный день месяца" }
+  );
+
+// Тип точки, совпадающий с RawPoint на клиенте
+export type GraphPoint = {
+  id: string;
+  year: number;
+  month: number; // 1..12
+  day: number; // 1..31
+  calories: number;
+};
+
 export type UpdateState = { ok: boolean; id?: string; error?: string };
 export type DeleteState = { ok: boolean; id?: string; error?: string };
+
+// Загрузка всех точек пользователя
+export async function loadGraphPoints(): Promise<GraphPoint[]> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return [];
+
+  const rows = await sql<{ id: string; d: string; calories: number }[]>`
+  SELECT id, to_char(d, 'YYYY-MM-DD') AS d, calories
+  FROM calories_log
+  WHERE user_id = ${userId}
+  ORDER BY d ASC
+`;
+
+  return rows.map((r) => {
+    const [y, m, d] = r.d.split("-").map(Number);
+    return { id: r.id, year: y, month: m, day: d, calories: r.calories };
+  });
+
+  // const rows = await sql<{ id: string; d: string; calories: number }[]>`
+  //   SELECT id, d::date, calories
+  //   FROM calories_log
+  //   WHERE user_id = ${userId}
+  //   ORDER BY d ASC
+  // `;
+
+  // return rows.map((r) => {
+  //   // d приходит как 'YYYY-MM-DD'
+  //   const dt = new Date(`${r.d}T00:00:00Z`);
+  //   return {
+  //     id: r.id,
+  //     year: dt.getUTCFullYear(),
+  //     month: dt.getUTCMonth() + 1,
+  //     day: dt.getUTCDate(),
+  //     calories: r.calories,
+  //   };
+  // });
+}
+
+// UPSERT точки по (user_id, date)
+export async function upsertGraphPoint(input: {
+  year: number;
+  month: number;
+  day: number;
+  calories: number;
+}): Promise<GraphPoint> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  const parsed = UpsertPointSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Ошибка валидации");
+  }
+  const { year, month, day, calories } = parsed.data;
+
+  // Дата строго в UTC, чтобы избежать смещений по таймзоне
+  const isoDate = new Date(Date.UTC(year, month - 1, day))
+    .toISOString()
+    .slice(0, 10); // YYYY-MM-DD
+
+  const rows = await sql<{ id: string; d: string; calories: number }[]>`
+  INSERT INTO calories_log (user_id, d, calories)
+  VALUES (${userId}, ${isoDate}, ${calories})
+  ON CONFLICT (user_id, d)
+  DO UPDATE SET calories = EXCLUDED.calories, updated_at = now()
+  RETURNING id, to_char(d, 'YYYY-MM-DD') AS d, calories
+`;
+
+  const r = rows[0];
+  const [y, m, d] = r.d.split("-").map(Number);
+  return { id: r.id, year: y, month: m, day: d, calories: r.calories };
+
+  // const rows = await sql<{ id: string; d: string; calories: number }[]>`
+  //   INSERT INTO calories_log (user_id, d, calories)
+  //   VALUES (${userId}, ${isoDate}, ${calories})
+  //   ON CONFLICT (user_id, d)
+  //   DO UPDATE SET calories = EXCLUDED.calories, updated_at = now()
+  //   RETURNING id, d::date, calories
+  // `;
+
+  // const r = rows[0];
+  // const dt = new Date(`${r.d}T00:00:00Z`);
+  // return {
+  //   id: r.id,
+  //   year: dt.getUTCFullYear(),
+  //   month: dt.getUTCMonth() + 1,
+  //   day: dt.getUTCDate(),
+  //   calories: r.calories,
+  // };
+}
+
+// Удаление (опционально) — по id
+export async function deleteGraphPoint(id: string): Promise<{ ok: boolean }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  await sql`
+    DELETE FROM calories_log
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+  return { ok: true };
+}
 
 // Создание задачи - добавляем в НАЧАЛО списка
 export async function createTodoFetch(formData: FormData) {
