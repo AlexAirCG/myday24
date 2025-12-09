@@ -69,25 +69,6 @@ export async function loadGraphPoints(): Promise<GraphPoint[]> {
     const [y, m, d] = r.d.split("-").map(Number);
     return { id: r.id, year: y, month: m, day: d, calories: r.calories };
   });
-
-  // const rows = await sql<{ id: string; d: string; calories: number }[]>`
-  //   SELECT id, d::date, calories
-  //   FROM calories_log
-  //   WHERE user_id = ${userId}
-  //   ORDER BY d ASC
-  // `;
-
-  // return rows.map((r) => {
-  //   // d приходит как 'YYYY-MM-DD'
-  //   const dt = new Date(`${r.d}T00:00:00Z`);
-  //   return {
-  //     id: r.id,
-  //     year: dt.getUTCFullYear(),
-  //     month: dt.getUTCMonth() + 1,
-  //     day: dt.getUTCDate(),
-  //     calories: r.calories,
-  //   };
-  // });
 }
 
 // UPSERT точки по (user_id, date)
@@ -123,24 +104,6 @@ export async function upsertGraphPoint(input: {
   const r = rows[0];
   const [y, m, d] = r.d.split("-").map(Number);
   return { id: r.id, year: y, month: m, day: d, calories: r.calories };
-
-  // const rows = await sql<{ id: string; d: string; calories: number }[]>`
-  //   INSERT INTO calories_log (user_id, d, calories)
-  //   VALUES (${userId}, ${isoDate}, ${calories})
-  //   ON CONFLICT (user_id, d)
-  //   DO UPDATE SET calories = EXCLUDED.calories, updated_at = now()
-  //   RETURNING id, d::date, calories
-  // `;
-
-  // const r = rows[0];
-  // const dt = new Date(`${r.d}T00:00:00Z`);
-  // return {
-  //   id: r.id,
-  //   year: dt.getUTCFullYear(),
-  //   month: dt.getUTCMonth() + 1,
-  //   day: dt.getUTCDate(),
-  //   calories: r.calories,
-  // };
 }
 
 // Удаление (опционально) — по id
