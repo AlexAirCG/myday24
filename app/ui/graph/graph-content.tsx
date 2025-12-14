@@ -15,6 +15,7 @@ type RawPoint = {
   month: number; // 1..12
   day: number; // 1..31 (зависит от месяца)
   calories: number; // 0..5000
+  weight?: number; // кг, необязательно
 };
 
 const DAY_PIXEL_STEP = 10;
@@ -25,6 +26,9 @@ const GRAPH_BOTTOM_PADDING = 10;
 const DEFAULT_GRAPH_WIDTH = 600;
 const CALORIES_MIN = 1200;
 const CALORIES_MAX = 3300;
+
+const WEIGHT_MIN = 30; // минимальный логичный вес, кг
+const WEIGHT_MAX = 300; // максимальный логичный вес, кг
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -45,22 +49,47 @@ function toUtcMs(y: number, m1to12: number, d: number) {
   return Date.UTC(y, m1to12 - 1, d);
 }
 
+// Форматирование даты дд.мм.гг (две последние цифры года)
+const formatDMY2 = (y: number, m1to12: number, d: number) => {
+  const dd = String(d).padStart(2, "0");
+  const mm = String(m1to12).padStart(2, "0");
+  const yy = String(y % 100).padStart(2, "0");
+  return `${dd}.${mm}.${yy}`;
+};
+
 export function GraphContent() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [calories, setCalories] = useState<string>("");
+  const [weight, setWeight] = useState<string>(""); // новое поле ввода веса
   const [points, setPoints] = useState<RawPoint[]>([]);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
-  const [marker, setMarker] = useState<{ x: number; y: number } | null>(null);
+
+  // marker: координаты и дата; вес выводим по данным точки
+  const [marker, setMarker] = useState<{
+    x: number;
+    y: number;
+    dateStr: string;
+    weightStr?: string;
+  } | null>(null);
 
   // загрузка точек при монтировании
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await loadGraphPoints();
+        const data = await loadGraphPoints(); // StoredPoint[]
         if (!cancelled) {
-          setPoints(data);
+          const normalized: RawPoint[] = data.map((p) => ({
+            id: p.id,
+            year: p.year,
+            month: p.month,
+            day: p.day,
+            calories: p.calories,
+            // приводим null к undefined для соответствия RawPoint
+            weight: p.weight ?? undefined,
+          }));
+          setPoints(normalized);
         }
       } catch (e) {
         console.error("Failed to load graph points:", e);
@@ -128,7 +157,6 @@ export function GraphContent() {
       const daysDiff = (timeMs - baseMs) / MS_PER_DAY;
       const x = daysDiff * DAY_PIXEL_STEP;
 
-      // на всякий случай приведём калории к числу
       const c =
         typeof p.calories === "number" ? p.calories : Number(p.calories);
       if (!isFiniteNum(c)) continue;
@@ -155,7 +183,7 @@ export function GraphContent() {
   const dateKey = (y: number, m: number, d: number) =>
     `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
-  // NEW: заменить/добавить точку по дате
+  // заменить/добавить точку по дате
   const upsertLocalPointByDate = (np: RawPoint) => {
     setPoints((prev) => {
       const key = dateKey(np.year, np.month, np.day);
@@ -203,17 +231,45 @@ export function GraphContent() {
       return;
     }
 
+    // Вес — необязателен. Если указан, валидируем.
+    let weightValue: number | undefined = undefined;
+    if (weight.trim().length > 0) {
+      const parsed = Number(weight);
+      if (Number.isNaN(parsed)) {
+        setError("Некорректный ввод веса.");
+        return;
+      }
+      if (parsed < WEIGHT_MIN || parsed > WEIGHT_MAX) {
+        setError(`Вес должен быть в диапазоне ${WEIGHT_MIN}-${WEIGHT_MAX} кг.`);
+        return;
+      }
+      // округлим до 0.1 кг
+      weightValue = Math.round(parsed * 10) / 10;
+    }
+
     try {
       setLoading(true);
       setError("");
 
-      // Сохраняем на сервер (UPSERT по дате)
-      const saved = await upsertGraphPoint({
+      // Формируем payload, добавляя вес только если он задан
+      const payload: {
+        year: number;
+        month: number;
+        day: number;
+        calories: number;
+        weight?: number;
+      } = {
         year: yearValue,
         month: monthValue,
         day: dayValue,
         calories: caloriesValue,
-      });
+      };
+      if (typeof weightValue === "number") {
+        payload.weight = weightValue;
+      }
+
+      // Сохраняем на сервер (UPSERT по дате)
+      const saved = await upsertGraphPoint(payload);
 
       // Синхронизируем локальное состояние — заменить/добавить по дате
       upsertLocalPointByDate({
@@ -222,9 +278,13 @@ export function GraphContent() {
         month: saved.month,
         day: saved.day,
         calories: saved.calories,
+        // если сервер вернул weight — используем его, иначе наш локальный
+        weight: typeof saved.weight === "number" ? saved.weight : weightValue,
       });
 
       setCalories("");
+      // Вес можно оставить (если часто одинаковый), либо очистить:
+      // setWeight("");
       // Дату оставляем, чтобы можно было добавлять подряд
     } catch (e: unknown) {
       console.error(e);
@@ -353,6 +413,21 @@ export function GraphContent() {
           />
         </label>
 
+        {/* Новое поле: Вес, кг */}
+        <label className="flex flex-col text-sm text-slate-700">
+          Вес, кг
+          <input
+            type="number"
+            step="0.1"
+            min={WEIGHT_MIN}
+            max={WEIGHT_MAX}
+            className="mt-1 w-40 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            placeholder="кг"
+            value={weight}
+            onChange={(event) => setWeight(event.target.value)}
+          />
+        </label>
+
         <button
           type="button"
           className="inline-flex items-center rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60"
@@ -425,11 +500,20 @@ export function GraphContent() {
             <g key={point.id}>
               <circle
                 onClick={() =>
-                  setMarker((prev) =>
-                    prev && prev.x === point.x && prev.y === point.y
-                      ? null
-                      : { x: point.x, y: point.y }
-                  )
+                  setMarker((prev) => {
+                    if (prev && prev.x === point.x && prev.y === point.y) {
+                      return null;
+                    }
+                    return {
+                      x: point.x,
+                      y: point.y,
+                      dateStr: formatDMY2(point.year, point.month, point.day),
+                      weightStr:
+                        typeof point.weight === "number"
+                          ? `${point.weight}кг`
+                          : "—",
+                    };
+                  })
                 }
                 cx={point.x}
                 cy={point.y}
@@ -439,8 +523,13 @@ export function GraphContent() {
               />
               <title>{`Дата: ${String(point.day).padStart(2, "0")}.${String(
                 point.month
-              ).padStart(2, "0")}.${point.year}, значение: ${
-                point.calories
+              ).padStart(2, "0")}.${String(point.year % 100).padStart(
+                2,
+                "0"
+              )}, калории: ${point.calories}${
+                typeof point.weight === "number"
+                  ? `, вес: ${point.weight}кг`
+                  : ""
               }`}</title>
             </g>
           ))}
@@ -451,30 +540,51 @@ export function GraphContent() {
                 x1={marker.x}
                 y1={0}
                 x2={marker.x}
-                y2={GRAPH_HEIGHT} // было: graphWidth — это опечатка
+                y2={GRAPH_HEIGHT}
                 stroke="rgba(31, 92, 184, 0.7)"
                 strokeWidth={1.5}
                 strokeDasharray="6 4"
               />
               <g transform={`translate(${marker.x}, ${GRAPH_TOP_PADDING})`}>
+                {/* Верхний блок: показываем вес точки или тире */}
                 <rect
-                  x={-18}
-                  y={-1}
-                  width={36}
-                  height={14}
+                  x={-30}
+                  y={-4}
+                  width={60}
+                  height={24}
                   fill="white"
-                  rx={3}
+                  rx={5}
                 />
                 <text
                   x={0}
                   y={0}
                   dominantBaseline="hanging"
                   textAnchor="middle"
-                  fontSize={12}
+                  fontSize={16}
                   fontWeight={700}
                   fill="#0f172a"
                 >
-                  75кг
+                  {marker.weightStr ?? "—"}
+                </text>
+                {/* Нижний блок: дата в формате дд.мм.гг */}
+                <rect
+                  x={-35}
+                  y={255}
+                  width={70}
+                  height={24}
+                  fill="white"
+                  rx={5}
+                />
+                <text
+                  x={0}
+                  y={260}
+                  dominantBaseline="hanging"
+                  textAnchor="middle"
+                  fontSize={16}
+                  fontWeight={700}
+                  fill="#0f172a"
+                >
+                  {marker.dateStr}
                 </text>
               </g>
             </g>
