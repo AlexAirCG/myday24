@@ -30,10 +30,15 @@ const UpsertPointSchema = z
     month: z.number().int().min(1).max(12),
     day: z.number().int().min(1).max(31),
     calories: z.number().int().min(0).max(10000),
+    weight: z
+      .number()
+      .min(30)
+      .max(300)
+      .refine((v) => Number.isFinite(v), "Некорректный вес")
+      .optional(),
   })
   .refine(
     (v) => {
-      // корректность дня для конкретного месяца/года
       const dim = new Date(v.year, v.month, 0).getDate();
       return v.day >= 1 && v.day <= dim;
     },
@@ -47,6 +52,7 @@ export type GraphPoint = {
   month: number; // 1..12
   day: number; // 1..31
   calories: number;
+  weight?: number | null;
 };
 
 export type UpdateState = { ok: boolean; id?: string; error?: string };
@@ -58,16 +64,29 @@ export async function loadGraphPoints(): Promise<GraphPoint[]> {
   const userId = session?.user?.id;
   if (!userId) return [];
 
-  const rows = await sql<{ id: string; d: string; calories: number }[]>`
-  SELECT id, to_char(d, 'YYYY-MM-DD') AS d, calories
-  FROM calories_log
-  WHERE user_id = ${userId}
-  ORDER BY d ASC
-`;
+  const rows = await sql<
+    { id: string; d: string; calories: number; weight: number | null }[]
+  >`
+    SELECT
+      id,
+      to_char(d, 'YYYY-MM-DD') AS d,
+      calories,
+      weight::float AS weight
+    FROM calories_log
+    WHERE user_id = ${userId}
+    ORDER BY d ASC
+  `;
 
   return rows.map((r) => {
     const [y, m, d] = r.d.split("-").map(Number);
-    return { id: r.id, year: y, month: m, day: d, calories: r.calories };
+    return {
+      id: r.id,
+      year: y,
+      month: m,
+      day: d,
+      calories: r.calories,
+      weight: r.weight,
+    };
   });
 }
 
@@ -77,6 +96,7 @@ export async function upsertGraphPoint(input: {
   month: number;
   day: number;
   calories: number;
+  weight?: number;
 }): Promise<GraphPoint> {
   const session = await auth();
   const userId = session?.user?.id;
@@ -87,23 +107,39 @@ export async function upsertGraphPoint(input: {
     throw new Error(parsed.error.issues[0]?.message ?? "Ошибка валидации");
   }
   const { year, month, day, calories } = parsed.data;
+  // нормализуем вес до 0.1 кг (если был передан)
+  const weight =
+    typeof parsed.data.weight === "number"
+      ? Math.round(parsed.data.weight * 10) / 10
+      : null;
 
-  // Дата строго в UTC, чтобы избежать смещений по таймзоне
   const isoDate = new Date(Date.UTC(year, month - 1, day))
     .toISOString()
     .slice(0, 10); // YYYY-MM-DD
 
-  const rows = await sql<{ id: string; d: string; calories: number }[]>`
-  INSERT INTO calories_log (user_id, d, calories)
-  VALUES (${userId}, ${isoDate}, ${calories})
-  ON CONFLICT (user_id, d)
-  DO UPDATE SET calories = EXCLUDED.calories, updated_at = now()
-  RETURNING id, to_char(d, 'YYYY-MM-DD') AS d, calories
-`;
+  const rows = await sql<
+    { id: string; d: string; calories: number; weight: number | null }[]
+  >`
+    INSERT INTO calories_log (user_id, d, calories, weight)
+    VALUES (${userId}, ${isoDate}, ${calories}, ${weight})
+    ON CONFLICT (user_id, d)
+    DO UPDATE
+      SET calories = EXCLUDED.calories,
+          weight   = EXCLUDED.weight,
+          updated_at = now()
+    RETURNING id, to_char(d, 'YYYY-MM-DD') AS d, calories, weight::float AS weight
+  `;
 
   const r = rows[0];
   const [y, m, d] = r.d.split("-").map(Number);
-  return { id: r.id, year: y, month: m, day: d, calories: r.calories };
+  return {
+    id: r.id,
+    year: y,
+    month: m,
+    day: d,
+    calories: r.calories,
+    weight: r.weight,
+  };
 }
 
 // Удаление (опционально) — по id
