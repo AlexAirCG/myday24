@@ -3,11 +3,7 @@ import { forwardRef } from "react";
 import { useMemo, useState, useRef, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import { ru } from "date-fns/locale/ru";
-import {
-  loadGraphPoints,
-  upsertGraphPoint,
-  type GraphPoint as StoredPoint,
-} from "@/app/lib/actions";
+import { loadGraphPoints, upsertGraphPoint } from "@/app/lib/actions";
 
 type RawPoint = {
   id: string;
@@ -57,10 +53,20 @@ const formatDMY2 = (y: number, m1to12: number, d: number) => {
   return `${dd}.${mm}.${yy}`;
 };
 
+// хелпер - последний вес
+function compareByYMD(
+  a: { year: number; month: number; day: number },
+  b: { year: number; month: number; day: number }
+) {
+  if (a.year !== b.year) return a.year - b.year;
+  if (a.month !== b.month) return a.month - b.month;
+  return a.day - b.day;
+}
+
 export function GraphContent() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [calories, setCalories] = useState<string>("");
-  const [weight, setWeight] = useState<string>(""); // новое поле ввода веса
+  const [weight, setWeight] = useState<string>("");
   const [points, setPoints] = useState<RawPoint[]>([]);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -78,7 +84,7 @@ export function GraphContent() {
     let cancelled = false;
     (async () => {
       try {
-        const data = await loadGraphPoints(); // StoredPoint[]
+        const data = await loadGraphPoints();
         if (!cancelled) {
           const normalized: RawPoint[] = data.map((p) => ({
             id: p.id,
@@ -197,6 +203,21 @@ export function GraphContent() {
     });
   };
 
+  // последний известный вес:
+  const lastKnownWeight = useMemo<number | undefined>(() => {
+    if (!points.length) return undefined;
+    // Сортируем по дате по возрастанию
+    const sorted = [...points].sort(compareByYMD);
+    // Ищем с конца первую точку с заданным весом
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const w = sorted[i].weight;
+      if (typeof w === "number" && Number.isFinite(w)) {
+        return Math.round(w * 10) / 10; // нормализуем до 0.1 кг
+      }
+    }
+    return undefined;
+  }, [points]);
+
   const handleAddPoint = async () => {
     if (!selectedDate || !calories) {
       setError("Выберите дату и укажите значение.");
@@ -231,8 +252,9 @@ export function GraphContent() {
       return;
     }
 
-    // Вес — необязателен. Если указан, валидируем.
+    // Вес — необязателен. Если указан, валидируем. Если не указан — берём последний добавленный.
     let weightValue: number | undefined = undefined;
+
     if (weight.trim().length > 0) {
       const parsed = Number(weight);
       if (Number.isNaN(parsed)) {
@@ -245,13 +267,18 @@ export function GraphContent() {
       }
       // округлим до 0.1 кг
       weightValue = Math.round(parsed * 10) / 10;
+    } else {
+      // если вес не введен — используем последний известный
+      if (typeof lastKnownWeight === "number") {
+        weightValue = lastKnownWeight;
+      }
+      // если последнего веса нет вовсе — оставим undefined (вес не будет отправлен)
     }
 
     try {
       setLoading(true);
       setError("");
 
-      // Формируем payload, добавляя вес только если он задан
       const payload: {
         year: number;
         month: number;
@@ -264,28 +291,26 @@ export function GraphContent() {
         day: dayValue,
         calories: caloriesValue,
       };
+
       if (typeof weightValue === "number") {
         payload.weight = weightValue;
       }
 
-      // Сохраняем на сервер (UPSERT по дате)
       const saved = await upsertGraphPoint(payload);
 
-      // Синхронизируем локальное состояние — заменить/добавить по дате
       upsertLocalPointByDate({
         id: saved.id,
         year: saved.year,
         month: saved.month,
         day: saved.day,
         calories: saved.calories,
-        // если сервер вернул weight — используем его, иначе наш локальный
         weight: typeof saved.weight === "number" ? saved.weight : weightValue,
       });
 
       setCalories("");
-      // Вес можно оставить (если часто одинаковый), либо очистить:
-      // setWeight("");
-      // Дату оставляем, чтобы можно было добавлять подряд
+      // Опционально: можно автозаполнить поле весом, если пользователь часто вводит одинаковый:
+      // if (typeof weightValue === "number") setWeight(String(weightValue));
+      // Дату оставляем
     } catch (e: unknown) {
       console.error(e);
       const message =
@@ -304,6 +329,115 @@ export function GraphContent() {
       setLoading(false);
     }
   };
+
+  // orig
+  // const handleAddPoint = async () => {
+  //   if (!selectedDate || !calories) {
+  //     setError("Выберите дату и укажите значение.");
+  //     return;
+  //   }
+
+  //   const yearValue = selectedDate.getFullYear();
+  //   const monthValue = selectedDate.getMonth() + 1; // 0..11 -> 1..12
+  //   const dayValue = selectedDate.getDate();
+  //   const caloriesValue = Number(calories);
+
+  //   if (Number.isNaN(caloriesValue)) {
+  //     setError("Некорректный ввод калорий.");
+  //     return;
+  //   }
+
+  //   if (monthValue < 1 || monthValue > 12) {
+  //     setError("Некорректный месяц.");
+  //     return;
+  //   }
+
+  //   const dim = daysInMonth(yearValue, monthValue);
+  //   if (dayValue < 1 || dayValue > dim) {
+  //     setError("Некорректный день месяца.");
+  //     return;
+  //   }
+
+  //   if (caloriesValue < CALORIES_MIN || caloriesValue > CALORIES_MAX) {
+  //     setError(
+  //       `Значение должно быть в диапазоне ${CALORIES_MIN}-${CALORIES_MAX}.`
+  //     );
+  //     return;
+  //   }
+
+  //   // Вес — необязателен. Если указан, валидируем.
+  //   let weightValue: number | undefined = undefined;
+  //   if (weight.trim().length > 0) {
+  //     const parsed = Number(weight);
+  //     if (Number.isNaN(parsed)) {
+  //       setError("Некорректный ввод веса.");
+  //       return;
+  //     }
+  //     if (parsed < WEIGHT_MIN || parsed > WEIGHT_MAX) {
+  //       setError(`Вес должен быть в диапазоне ${WEIGHT_MIN}-${WEIGHT_MAX} кг.`);
+  //       return;
+  //     }
+  //     // округлим до 0.1 кг
+  //     weightValue = Math.round(parsed * 10) / 10;
+  //   }
+
+  //   try {
+  //     setLoading(true);
+  //     setError("");
+
+  //     // Формируем payload, добавляя вес только если он задан
+  //     const payload: {
+  //       year: number;
+  //       month: number;
+  //       day: number;
+  //       calories: number;
+  //       weight?: number;
+  //     } = {
+  //       year: yearValue,
+  //       month: monthValue,
+  //       day: dayValue,
+  //       calories: caloriesValue,
+  //     };
+  //     if (typeof weightValue === "number") {
+  //       payload.weight = weightValue;
+  //     }
+
+  //     // Сохраняем на сервер (UPSERT по дате)
+  //     const saved = await upsertGraphPoint(payload);
+
+  //     // Синхронизируем локальное состояние — заменить/добавить по дате
+  //     upsertLocalPointByDate({
+  //       id: saved.id,
+  //       year: saved.year,
+  //       month: saved.month,
+  //       day: saved.day,
+  //       calories: saved.calories,
+  //       // если сервер вернул weight — используем его, иначе наш локальный
+  //       weight: typeof saved.weight === "number" ? saved.weight : weightValue,
+  //     });
+
+  //     setCalories("");
+  //     // Вес можно оставить (если часто одинаковый), либо очистить:
+  //     // setWeight("");
+  //     // Дату оставляем, чтобы можно было добавлять подряд
+  //   } catch (e: unknown) {
+  //     console.error(e);
+  //     const message =
+  //       e instanceof Error
+  //         ? e.message
+  //         : typeof e === "string"
+  //         ? e
+  //         : (typeof e === "object" &&
+  //             e !== null &&
+  //             "message" in e &&
+  //             typeof (e as { message?: unknown }).message === "string" &&
+  //             (e as { message?: string }).message) ||
+  //           "Не удалось сохранить точку.";
+  //     setError(message);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   // кастомный инпут с readOnly через customInput:
   const DateInput = forwardRef<
@@ -422,7 +556,12 @@ export function GraphContent() {
             min={WEIGHT_MIN}
             max={WEIGHT_MAX}
             className="mt-1 w-40 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            placeholder="кг"
+            // placeholder="кг"
+            placeholder={
+              typeof lastKnownWeight === "number"
+                ? `последний ${lastKnownWeight}кг`
+                : "кг"
+            }
             value={weight}
             onChange={(event) => setWeight(event.target.value)}
           />
