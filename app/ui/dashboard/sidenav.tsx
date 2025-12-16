@@ -35,8 +35,20 @@ export default function SideNav({ email }: SideNavProps) {
           </SubmitButton>
         </form>
       </div>
-      <div className="flex grow flex-row justify-between space-x-2 md:flex-col md:space-x-0 md:space-y-2">
-        <NavLinks />
+      <div
+        className="
+          flex grow flex-row md:flex-col
+          justify-between
+          space-x-2 md:space-x-0 md:space-y-2
+          overflow-x-auto no-scrollbar md:overflow-visible
+          flex-nowrap
+          -mx-2 px-2
+          scroll-smooth
+        "
+      >
+        <div className="flex flex-row md:flex-col gap-2 md:gap-2 whitespace-nowrap overflow-x-auto [&>*]:flex-shrink-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <NavLinks />
+        </div>
         <div className="hidden h-auto w-full grow rounded-md bg-gray-50 md:block"></div>
       </div>
       <form
