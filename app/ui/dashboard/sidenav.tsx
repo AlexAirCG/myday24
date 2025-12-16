@@ -37,19 +37,22 @@ export default function SideNav({ email }: SideNavProps) {
       </div>
       <div
         className="
-          flex grow flex-row md:flex-col
-          justify-between
-          space-x-2 md:space-x-0 md:space-y-2
-          overflow-x-auto no-scrollbar md:overflow-visible
-          flex-nowrap
-          -mx-2 px-2
-          scroll-smooth
+            flex grow flex-row md:flex-col
+            space-x-2 md:space-x-0 md:space-y-2
+            overflow-x-auto md:overflow-visible
+            whitespace-nowrap md:whitespace-normal
+            [&>*]:flex-shrink-0 md:[&>*]:flex-shrink
+            scroll-smooth
+           -mr-4 pr-4 md:mr-0 md:pr-0
+           -ml-2 pl-2 md:ml-0 md:pl-0 
+           [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]
         "
       >
-        <div className="flex flex-row md:flex-col gap-2 md:gap-2 whitespace-nowrap overflow-x-auto [&>*]:flex-shrink-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <NavLinks />
-        </div>
+        <NavLinks />
+
         <div className="hidden h-auto w-full grow rounded-md bg-gray-50 md:block"></div>
+        {/* тонкая «шторка» на правом краю — только на мобильных */}
+        <div className="pointer-events-none absolute right-0 top-0 h-full w-2 md:hidden bg-gradient-to-l from-white to-transparent dark:from-gray-900"></div>
       </div>
       <form
         action={async () => {
