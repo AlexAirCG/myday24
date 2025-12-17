@@ -5,6 +5,7 @@ import { FaPowerOff } from "react-icons/fa6";
 import { IoPowerSharp } from "react-icons/io5";
 import { signOut } from "@/auth";
 import { SubmitButton } from "../submit-button";
+import ElasticScroll from "./elastic-scroll";
 
 type SideNavProps = { email?: string | null };
 
@@ -35,25 +36,26 @@ export default function SideNav({ email }: SideNavProps) {
           </SubmitButton>
         </form>
       </div>
-      <div
-        className="
-            flex grow flex-row md:flex-col
-            space-x-2 md:space-x-0 md:space-y-2
-            overflow-x-auto md:overflow-visible
-            whitespace-nowrap md:whitespace-normal
-            [&>*]:flex-shrink-0 md:[&>*]:flex-shrink
-            scroll-smooth
-           -mr-4 pr-4 md:mr-0 md:pr-0
-           -ml-2 pl-2 md:ml-0 md:pl-0 
-           [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]
-        "
+
+      {/* Обернули скролл-контейнер в ElasticScroll для мобильной резинки */}
+      <ElasticScroll
+        className={`
+          flex grow flex-nowrap flex-row md:flex-col
+          space-x-2 md:space-x-0 md:space-y-2
+          overflow-x-auto md:overflow-visible
+          whitespace-nowrap md:whitespace-normal
+          [&>*]:flex-shrink-0 md:[&>*]:flex-shrink
+          scroll-smooth
+          -mr-4 pr-4 md:mr-0 md:pr-0
+          -ml-2 pl-0 md:ml-0 md:pl-0
+          [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]
+          md:translate-x-0
+        `}
       >
         <NavLinks />
-
         <div className="hidden h-auto w-full grow rounded-md bg-gray-50 md:block"></div>
-        {/* тонкая «шторка» на правом краю — только на мобильных */}
-        <div className="pointer-events-none absolute right-0 top-0 h-full w-2 md:hidden bg-gradient-to-l from-white to-transparent dark:from-gray-900"></div>
-      </div>
+      </ElasticScroll>
+
       <form
         action={async () => {
           "use server";
