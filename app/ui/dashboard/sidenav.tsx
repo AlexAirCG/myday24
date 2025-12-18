@@ -46,8 +46,7 @@ export default function SideNav({ email }: SideNavProps) {
           whitespace-nowrap md:whitespace-normal
           [&>*]:flex-shrink-0 md:[&>*]:flex-shrink
           scroll-smooth
-          -mr-4 pr-4 md:mr-0 md:pr-0
-          -ml-2 pl-0 md:ml-0 md:pl-0
+          px-1 md:px-0
           [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]
           md:translate-x-0
         `}

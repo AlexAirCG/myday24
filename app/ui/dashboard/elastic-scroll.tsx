@@ -51,25 +51,21 @@ export default function ElasticScroll({
       const t = ev.touches[0];
       const dx = t.clientX - startXRef.current;
 
-      const maxScrollLeft = el.scrollWidth - el.clientWidth;
-      const atLeft = el.scrollLeft <= 0;
-      const atRight = el.scrollLeft >= maxScrollLeft;
+      const maxScrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      const EPS = 1;
+      const atLeft = el.scrollLeft <= EPS;
+      const atRight = el.scrollLeft >= maxScrollLeft - EPS;
 
-      // На первом движении решаем, включать ли «резинку»
       if (!elasticModeRef.current) {
         const shouldElastic = (atLeft && dx > 0) || (atRight && dx < 0);
         if (shouldElastic) {
           elasticModeRef.current = true;
         } else {
-          // Резинка не нужна — даем нативному скроллу работать
-          return;
+          return; // даем нативному скроллу работать
         }
       }
 
-      // Если резинка активна — блокируем нативную прокрутку, если это возможно
-      if (ev.cancelable) {
-        ev.preventDefault();
-      }
+      if (ev.cancelable) ev.preventDefault();
 
       const rawStretch = dx;
       const stretch = Math.max(
