@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createTodoFetch, toggleTodo } from "@/app/lib/actions";
+import { Button } from "../button";
 
 type Suggestion = { id: string; title: string };
 
@@ -99,17 +100,17 @@ export default function CreateTodo() {
             setTimeout(() => setOpen(false), 120);
           }}
           placeholder="Добавить покупку..."
-          className="w-full p-2 rounded bg-white border-gray-500 border-2 md:border-3"
+          className="w-full p-2 rounded bg-white border-gray-500 border-2 md:border-3 shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           autoComplete="off"
         />
-        <button
-          type="submit"
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        <Button
           disabled={isPending}
           title="Добавить новую задачу"
+          type="submit"
+          className="p-2"
         >
           Добавить
-        </button>
+        </Button>
       </form>
 
       {showSuggestions && (

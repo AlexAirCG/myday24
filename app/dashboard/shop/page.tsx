@@ -1,7 +1,7 @@
 import { fetchTodo } from "@/app/lib/data";
 import { inter } from "@/app/ui/fonts";
 import TableTodoShop from "@/app/ui/shop/table-todo-shop";
-import CreateTodo from "@/app/ui/todo/create-todo";
+import CreateTodo from "@/app/ui/shop/create-todo-shop";
 
 export const dynamic = "force-dynamic";
 

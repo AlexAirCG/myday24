@@ -1,9 +1,14 @@
 "use client";
+import Link from "next/link";
 import { forwardRef } from "react";
 import { useMemo, useState, useRef, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import { ru } from "date-fns/locale/ru";
 import { loadGraphPoints, upsertGraphPoint } from "@/app/lib/actions";
+import { Button } from "../button";
+import { BiSolidDownArrow } from "react-icons/bi";
+import { BiSolidLeftArrow } from "react-icons/bi";
+import { BiSolidRightArrow } from "react-icons/bi";
 
 type RawPoint = {
   id: string;
@@ -65,6 +70,7 @@ function compareByYMD(
 
 export function GraphContent() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [calories, setCalories] = useState<string>("");
   const [weight, setWeight] = useState<string>("");
   const [points, setPoints] = useState<RawPoint[]>([]);
@@ -330,115 +336,6 @@ export function GraphContent() {
     }
   };
 
-  // orig
-  // const handleAddPoint = async () => {
-  //   if (!selectedDate || !calories) {
-  //     setError("Выберите дату и укажите значение.");
-  //     return;
-  //   }
-
-  //   const yearValue = selectedDate.getFullYear();
-  //   const monthValue = selectedDate.getMonth() + 1; // 0..11 -> 1..12
-  //   const dayValue = selectedDate.getDate();
-  //   const caloriesValue = Number(calories);
-
-  //   if (Number.isNaN(caloriesValue)) {
-  //     setError("Некорректный ввод калорий.");
-  //     return;
-  //   }
-
-  //   if (monthValue < 1 || monthValue > 12) {
-  //     setError("Некорректный месяц.");
-  //     return;
-  //   }
-
-  //   const dim = daysInMonth(yearValue, monthValue);
-  //   if (dayValue < 1 || dayValue > dim) {
-  //     setError("Некорректный день месяца.");
-  //     return;
-  //   }
-
-  //   if (caloriesValue < CALORIES_MIN || caloriesValue > CALORIES_MAX) {
-  //     setError(
-  //       `Значение должно быть в диапазоне ${CALORIES_MIN}-${CALORIES_MAX}.`
-  //     );
-  //     return;
-  //   }
-
-  //   // Вес — необязателен. Если указан, валидируем.
-  //   let weightValue: number | undefined = undefined;
-  //   if (weight.trim().length > 0) {
-  //     const parsed = Number(weight);
-  //     if (Number.isNaN(parsed)) {
-  //       setError("Некорректный ввод веса.");
-  //       return;
-  //     }
-  //     if (parsed < WEIGHT_MIN || parsed > WEIGHT_MAX) {
-  //       setError(`Вес должен быть в диапазоне ${WEIGHT_MIN}-${WEIGHT_MAX} кг.`);
-  //       return;
-  //     }
-  //     // округлим до 0.1 кг
-  //     weightValue = Math.round(parsed * 10) / 10;
-  //   }
-
-  //   try {
-  //     setLoading(true);
-  //     setError("");
-
-  //     // Формируем payload, добавляя вес только если он задан
-  //     const payload: {
-  //       year: number;
-  //       month: number;
-  //       day: number;
-  //       calories: number;
-  //       weight?: number;
-  //     } = {
-  //       year: yearValue,
-  //       month: monthValue,
-  //       day: dayValue,
-  //       calories: caloriesValue,
-  //     };
-  //     if (typeof weightValue === "number") {
-  //       payload.weight = weightValue;
-  //     }
-
-  //     // Сохраняем на сервер (UPSERT по дате)
-  //     const saved = await upsertGraphPoint(payload);
-
-  //     // Синхронизируем локальное состояние — заменить/добавить по дате
-  //     upsertLocalPointByDate({
-  //       id: saved.id,
-  //       year: saved.year,
-  //       month: saved.month,
-  //       day: saved.day,
-  //       calories: saved.calories,
-  //       // если сервер вернул weight — используем его, иначе наш локальный
-  //       weight: typeof saved.weight === "number" ? saved.weight : weightValue,
-  //     });
-
-  //     setCalories("");
-  //     // Вес можно оставить (если часто одинаковый), либо очистить:
-  //     // setWeight("");
-  //     // Дату оставляем, чтобы можно было добавлять подряд
-  //   } catch (e: unknown) {
-  //     console.error(e);
-  //     const message =
-  //       e instanceof Error
-  //         ? e.message
-  //         : typeof e === "string"
-  //         ? e
-  //         : (typeof e === "object" &&
-  //             e !== null &&
-  //             "message" in e &&
-  //             typeof (e as { message?: unknown }).message === "string" &&
-  //             (e as { message?: string }).message) ||
-  //           "Не удалось сохранить точку.";
-  //     setError(message);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
   // кастомный инпут с readOnly через customInput:
   const DateInput = forwardRef<
     HTMLInputElement,
@@ -450,7 +347,7 @@ export function GraphContent() {
       onClick={onClick}
       placeholder={placeholder}
       readOnly
-      className="mt-1 w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+      className="mt-1 w-56 rounded-md bg-white border-gray-500 border-2  px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-[0_4px_8px_rgba(0,0,0,0.3)]"
     />
   ));
   DateInput.displayName = "DateInput";
@@ -511,28 +408,45 @@ export function GraphContent() {
       ? Math.max(contentWidth, containerWidth)
       : DEFAULT_GRAPH_WIDTH;
 
+  const dateNow = new Date().toLocaleDateString();
+
   return (
     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
       <h2 className="text-xl font-semibold text-slate-800">График калорий</h2>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="flex flex-col text-sm text-slate-700">
-          Дата
-          <DatePicker
-            selected={selectedDate}
-            onChange={(d) => setSelectedDate(d)}
-            placeholderText="Выберите дату"
-            dateFormat="dd-MM-yyyy"
-            locale={ru}
-            showMonthDropdown
-            showYearDropdown
-            dropdownMode="select"
-            showPopperArrow={false}
-            isClearable
-            todayButton="Сегодня"
-            customInput={<DateInput />}
-          />
-        </label>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-center">
+          <BiSolidLeftArrow className="text-gray-500" />
+          <div className="relative flex items-center ml-[50px] mr-[50px] border-gray-500 border-2 rounded pl-4 pr-4 pt-1 pb-1 shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+            <span>
+              {selectedDate ? selectedDate.toLocaleDateString() : dateNow}
+            </span>
+            <BiSolidDownArrow
+              className="ml-2 text-gray-500 cursor-pointer"
+              onClick={() => setShowDatePicker((show) => !show)}
+            />
+            {showDatePicker && (
+              <div className="absolute top-8 left-1/2 -translate-x-1/2 z-10 shadow-lg">
+                <DatePicker
+                  selected={selectedDate}
+                  onChange={(d) => {
+                    setSelectedDate(d);
+                    setShowDatePicker(false);
+                  }}
+                  placeholderText="Выберите дату"
+                  dateFormat="dd-MM-yyyy"
+                  locale={ru}
+                  dropdownMode="select"
+                  showPopperArrow={false}
+                  isClearable
+                  customInput={<DateInput />}
+                  inline
+                />
+              </div>
+            )}
+          </div>
+          <BiSolidRightArrow className="text-gray-500" />
+        </div>
 
         <label className="flex flex-col text-sm text-slate-700">
           Потреблённые калории
@@ -540,12 +454,16 @@ export function GraphContent() {
             type="number"
             min={CALORIES_MIN}
             max={CALORIES_MAX}
-            className="mt-1 w-48 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="mt-1 w-48 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             placeholder="ккал"
             value={calories}
             onChange={(event) => setCalories(event.target.value)}
           />
         </label>
+
+        <Button className="p-2 w-[120px]">
+          <Link href="/dashboard/create-food">Добавить еду </Link>
+        </Button>
 
         {/* Новое поле: Вес, кг */}
         <label className="flex flex-col text-sm text-slate-700">
@@ -555,7 +473,7 @@ export function GraphContent() {
             step="0.1"
             min={WEIGHT_MIN}
             max={WEIGHT_MAX}
-            className="mt-1 w-40 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="mt-1 w-40 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             // placeholder="кг"
             placeholder={
               typeof lastKnownWeight === "number"
@@ -567,14 +485,13 @@ export function GraphContent() {
           />
         </label>
 
-        <button
-          type="button"
-          className="inline-flex items-center rounded-md bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60"
+        <Button
+          className="p-2 justify-center"
           onClick={handleAddPoint}
           disabled={loading}
         >
           {loading ? "Сохранение..." : "Добавить"}
-        </button>
+        </Button>
       </div>
 
       {error ? (
