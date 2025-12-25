@@ -14,7 +14,7 @@ export default function NavLinks() {
   const pathName = usePathname(); // текущий путь пользователя из URL.
 
   const base =
-    "flex items-center h-10 gap-2 rounded-md bg-gray-200 px-3 text-[16px] font-medium hover:bg-sky-200 hover:text-blue-600 " +
+    "flex items-center h-10 gap-2 rounded-md bg-gray-200 border-gray-500 border-2 shadow-[0_4px_8px_rgba(0,0,0,0.3)] px-3 text-[16px] font-medium hover:bg-sky-200 hover:text-blue-600" +
     "whitespace-nowrap truncate overflow-hidden " +
     "w-[160px] flex-none justify-center " + // мобильные: фикс ширина
     "md:w-full md:flex-none md:justify-start"; // ПК: на всю ширину, высота фикс.
@@ -23,7 +23,7 @@ export default function NavLinks() {
     <>
       <Link
         className={clsx(base, {
-          "bg-sky-200 text-blue-600": pathName === "/dashboard",
+          "bg-sky-200  text-blue-600": pathName === "/dashboard",
         })}
         href={"/dashboard"}
       >

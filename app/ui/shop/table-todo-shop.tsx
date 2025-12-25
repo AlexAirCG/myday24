@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { DeleteTodo } from "../todo/buttons";
+import { DeleteTodo } from "./buttons";
 import { TbArrowsUpDown } from "react-icons/tb";
 import { CheckboxTodo } from "../todo/checkbox-todo";
 import { toggleTodo } from "@/app/lib/actions";
