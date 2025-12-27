@@ -1,3 +1,4 @@
+// app/ui/graph/graph-content.tsx
 "use client";
 import Link from "next/link";
 import { forwardRef } from "react";
@@ -26,7 +27,7 @@ const GRAPH_BOTTOM_PADDING = 10;
 
 const DEFAULT_GRAPH_WIDTH = 600;
 const CALORIES_MIN = 1200;
-const CALORIES_MAX = 3300;
+const CALORIES_MAX = 4000;
 
 const WEIGHT_MIN = 30; // минимальный логичный вес, кг
 const WEIGHT_MAX = 300; // максимальный логичный вес, кг
@@ -83,6 +84,7 @@ export function GraphContent() {
     y: number;
     dateStr: string;
     weightStr?: string;
+    calories?: number;
   } | null>(null);
 
   // загрузка точек при монтировании
@@ -314,7 +316,6 @@ export function GraphContent() {
       });
 
       setCalories("");
-      // Опционально: можно автозаполнить поле весом, если пользователь часто вводит одинаковый:
       // if (typeof weightValue === "number") setWeight(String(weightValue));
       // Дату оставляем
     } catch (e: unknown) {
@@ -397,7 +398,9 @@ export function GraphContent() {
   const contentWidth = useMemo(() => {
     if (!pointsWithCoords.length) return DEFAULT_GRAPH_WIDTH;
     const last = pointsWithCoords[pointsWithCoords.length - 1];
-    const w = last.x + DAY_PIXEL_STEP;
+    // Учитываем ширину столбца
+    const BAR_WIDTH = Math.max(3, DAY_PIXEL_STEP * 0.6);
+    const w = last.x + BAR_WIDTH + DAY_PIXEL_STEP * 0.4;
     return Number.isFinite(w)
       ? Math.max(w, DEFAULT_GRAPH_WIDTH)
       : DEFAULT_GRAPH_WIDTH;
@@ -409,6 +412,11 @@ export function GraphContent() {
       : DEFAULT_GRAPH_WIDTH;
 
   const dateNow = new Date().toLocaleDateString();
+
+  // Геометрия столбцов
+  const yBase = GRAPH_HEIGHT - GRAPH_BOTTOM_PADDING;
+  const BAR_WIDTH = Math.max(3, DAY_PIXEL_STEP * 0.6); // ширина столбца
+  const BAR_RADIUS = 2;
 
   return (
     <section className="flex w-full flex-col gap-4 rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
@@ -474,7 +482,6 @@ export function GraphContent() {
             min={WEIGHT_MIN}
             max={WEIGHT_MAX}
             className="mt-1 w-40 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            // placeholder="кг"
             placeholder={
               typeof lastKnownWeight === "number"
                 ? `последний ${lastKnownWeight}кг`
@@ -527,6 +534,7 @@ export function GraphContent() {
             </linearGradient>
           </defs>
 
+          {/* Фон с градиентом зон */}
           <rect
             x={0}
             y={0}
@@ -537,59 +545,55 @@ export function GraphContent() {
             onClick={() => setMarker(null)}
           />
 
-          {pointsWithCoords.slice(1).map((point, index) => {
-            const previous = pointsWithCoords[index];
+          {/* СТОЛБИКИ */}
+          {pointsWithCoords.map((point) => {
+            const barX = point.x - BAR_WIDTH / 2;
+            // y — позиция вершины столбика; ограничим минимумом/основанием
+            const yTop = Math.min(point.y, yBase);
+            const barH = Math.max(2, yBase - yTop);
             return (
-              <line
-                key={`${point.id}-line`}
-                x1={previous.x}
-                y1={previous.y}
-                x2={point.x}
-                y2={point.y}
-                stroke="rgb(31, 92, 184)"
-                strokeWidth={4}
-              />
+              <g key={point.id}>
+                <rect
+                  x={barX}
+                  y={yTop}
+                  width={BAR_WIDTH}
+                  height={barH}
+                  rx={BAR_RADIUS}
+                  fill="rgb(0, 127, 255)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMarker((prev) => {
+                      if (prev && prev.x === point.x && prev.y === point.y) {
+                        return null;
+                      }
+                      return {
+                        x: point.x,
+                        y: point.y,
+                        dateStr: formatDMY2(point.year, point.month, point.day),
+                        weightStr:
+                          typeof point.weight === "number"
+                            ? `${point.weight}кг`
+                            : "—",
+                        calories: point.calories,
+                      };
+                    });
+                  }}
+                />
+                <title>{`Дата: ${String(point.day).padStart(2, "0")}.${String(
+                  point.month
+                ).padStart(2, "0")}.${String(point.year % 100).padStart(
+                  2,
+                  "0"
+                )}, калории: ${point.calories}${
+                  typeof point.weight === "number"
+                    ? `, вес: ${point.weight}кг`
+                    : ""
+                }`}</title>
+              </g>
             );
           })}
 
-          {pointsWithCoords.map((point) => (
-            <g key={point.id}>
-              <circle
-                onClick={() =>
-                  setMarker((prev) => {
-                    if (prev && prev.x === point.x && prev.y === point.y) {
-                      return null;
-                    }
-                    return {
-                      x: point.x,
-                      y: point.y,
-                      dateStr: formatDMY2(point.year, point.month, point.day),
-                      weightStr:
-                        typeof point.weight === "number"
-                          ? `${point.weight}кг`
-                          : "—",
-                    };
-                  })
-                }
-                cx={point.x}
-                cy={point.y}
-                r={4.5}
-                fill="rgb(31, 92, 184)"
-                strokeWidth={1.5}
-              />
-              <title>{`Дата: ${String(point.day).padStart(2, "0")}.${String(
-                point.month
-              ).padStart(2, "0")}.${String(point.year % 100).padStart(
-                2,
-                "0"
-              )}, калории: ${point.calories}${
-                typeof point.weight === "number"
-                  ? `, вес: ${point.weight}кг`
-                  : ""
-              }`}</title>
-            </g>
-          ))}
-
+          {/* МАРКЕР / ГАЙД */}
           {marker && (
             <g pointerEvents="none">
               <line
@@ -622,6 +626,30 @@ export function GraphContent() {
                 >
                   {marker.weightStr ?? "—"}
                 </text>
+                {/* Средний блок: калории */}
+                {typeof marker.calories === "number" && (
+                  <>
+                    <rect
+                      x={-42}
+                      y={23}
+                      width={84}
+                      height={22}
+                      fill="white"
+                      rx={5}
+                    />
+                    <text
+                      x={0}
+                      y={28}
+                      dominantBaseline="hanging"
+                      textAnchor="middle"
+                      fontSize={14}
+                      fontWeight={700}
+                      fill="#0f172a"
+                    >
+                      {marker.calories} ккал
+                    </text>
+                  </>
+                )}
                 {/* Нижний блок: дата в формате дд.мм.гг */}
                 <rect
                   x={-35}
