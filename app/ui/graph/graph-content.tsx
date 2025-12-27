@@ -559,7 +559,7 @@ export function GraphContent() {
                   width={BAR_WIDTH}
                   height={barH}
                   rx={BAR_RADIUS}
-                  fill="rgb(0, 127, 255)"
+                  fill="rgba(64, 64, 64, 0.5)"
                   onClick={(e) => {
                     e.stopPropagation();
                     setMarker((prev) => {
