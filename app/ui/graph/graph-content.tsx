@@ -78,6 +78,11 @@ export function GraphContent() {
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
+  // Автовыбор текущей даты при монтировании
+  useEffect(() => {
+    setSelectedDate(new Date());
+  }, []);
+
   // marker: координаты и дата; вес выводим по данным точки
   const [marker, setMarker] = useState<{
     x: number;
@@ -449,6 +454,8 @@ export function GraphContent() {
                   isClearable
                   customInput={<DateInput />}
                   inline
+                  openToDate={new Date()} // если selectedDate = null, календарь откроется на сегодня
+                  maxDate={new Date()} // опционально: нельзя выбрать будущую дату
                 />
               </div>
             )}
@@ -559,7 +566,8 @@ export function GraphContent() {
                   width={BAR_WIDTH}
                   height={barH}
                   rx={BAR_RADIUS}
-                  fill="rgba(64, 64, 64, 0.5)"
+                  // fill="rgba(64, 64, 64, 0.5)"
+                  fill="rgba(0, 100, 0, 0.4)"
                   onClick={(e) => {
                     e.stopPropagation();
                     setMarker((prev) => {
