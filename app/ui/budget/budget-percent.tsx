@@ -10,14 +10,40 @@ type BudgetItem = {
   percent: number;
 };
 
-// @typescript-eslint/no-explicit-any
-function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
-  let timer: any;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), ms);
+function debounce<Args extends unknown[]>(
+  fn: (...args: Args) => void | Promise<void>,
+  ms: number
+) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  return (...args: Args): void => {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+    timer = setTimeout(() => {
+      // игнорируем промис, если fn async
+      void fn(...args);
+    }, ms);
   };
 }
+// function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number) {
+//   let timer: ReturnType<typeof setTimeout> | null = null;
+
+//   return (...args: Parameters<T>) => {
+//     if (timer !== null) {
+//       clearTimeout(timer);
+//     }
+//     timer = setTimeout(() => fn(...args), ms);
+//   };
+// }
+
+// function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
+//   let timer: any;
+//   return (...args: Parameters<T>) => {
+//     clearTimeout(timer);
+//     timer = setTimeout(() => fn(...args), ms);
+//   };
+// }
 
 export default function BudgetPercent() {
   const [items, setItems] = useState<BudgetItem[]>([]);
