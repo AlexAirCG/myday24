@@ -10,37 +10,29 @@ type BudgetItem = {
   percent: number;
 };
 
-type AnyFn<Args extends unknown[] = unknown[], R = unknown> = (
-  ...args: Args
-) => R;
-
-function debounce<Args extends unknown[]>(
-  fn: AnyFn<Args, void | Promise<void>>,
+function debounce<A extends unknown[]>(
+  fn: (...args: A) => void | Promise<void>,
   ms: number
-): (...args: Args) => void {
+): (...args: A) => void {
   let timer: ReturnType<typeof setTimeout> | null = null;
-  return (...args: Args) => {
+  return (...args: A) => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       void fn(...args);
     }, ms);
   };
 }
-// function debounce<T extends (...args: any[]) => void | Promise<void>>(
+// function debounce<T extends (...args: unknown[]) => void | Promise<void>>(
 //   fn: T,
 //   ms: number
-// ) {
+// ): (...args: Parameters<T>) => void {
 //   let timer: ReturnType<typeof setTimeout> | null = null;
 //   return (...args: Parameters<T>) => {
 //     if (timer) clearTimeout(timer);
-//     timer = setTimeout(() => fn(...args), ms);
-//   };
-// }
-// function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
-//   let timer: any;
-//   return (...args: Parameters<T>) => {
-//     clearTimeout(timer);
-//     timer = setTimeout(() => fn(...args), ms);
+//     timer = setTimeout(() => {
+//       // Игнорируем возможный Promise, чтобы не нарушать возвращаемый тип
+//       void fn(...args);
+//     }, ms);
 //   };
 // }
 
