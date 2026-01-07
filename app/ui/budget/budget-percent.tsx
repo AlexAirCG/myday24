@@ -10,6 +10,7 @@ type BudgetItem = {
   percent: number;
 };
 
+// @typescript-eslint/no-explicit-any
 function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
   let timer: any;
   return (...args: Parameters<T>) => {
