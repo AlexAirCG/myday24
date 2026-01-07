@@ -7,6 +7,7 @@ import { FaShopify } from "react-icons/fa6";
 import { VscGraph } from "react-icons/vsc";
 import { IoCalendarNumberOutline } from "react-icons/io5";
 import { CiMemoPad } from "react-icons/ci";
+import { FaPercent } from "react-icons/fa";
 
 // Карта ссылок для отображения в боковой навигации.
 
@@ -56,6 +57,15 @@ export default function NavLinks() {
       >
         <VscGraph className="w-6 h-6" />
         График
+      </Link>
+      <Link
+        className={clsx(base, {
+          "bg-sky-200 text-blue-600": pathName === "/dashboard/budget",
+        })}
+        href={"/dashboard/budget"}
+      >
+        <FaPercent className="w-4 h-4" />
+        Бюджет
       </Link>
     </>
   );

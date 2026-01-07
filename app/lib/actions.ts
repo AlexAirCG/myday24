@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
-
+// схемы ===========================================================================
 const UpdateTitleSchema = z.object({
   id: z.uuid(),
   title: z.string().trim().min(1, "Пустой заголовок"),
@@ -44,7 +44,112 @@ const UpsertPointSchema = z
     },
     { path: ["day"], message: "Некорректный день месяца" }
   );
+// =============================================================================================
+// budget ======================================================================================
+export type BudgetItemRow = {
+  id: string;
+  title: string;
+  percent: number;
+};
 
+export type BudgetState = {
+  totalBudget: number;
+  items: BudgetItemRow[];
+};
+
+// Загрузка бюджета текущего пользователя
+export async function loadBudget(): Promise<BudgetState> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { totalBudget: 0, items: [] };
+
+  const totalRows = await sql<{ total: number | null }[]>`
+    SELECT total::float AS total
+    FROM budget_totals
+    WHERE user_id = ${userId}
+    LIMIT 1
+  `;
+
+  const items = await sql<BudgetItemRow[]>`
+    SELECT id, title, percent::float AS percent
+    FROM budget_items
+    WHERE user_id = ${userId}
+    ORDER BY created_at ASC, id ASC
+  `;
+
+  return {
+    totalBudget: totalRows[0]?.total ?? 0,
+    items,
+  };
+}
+
+// Установка общей суммы бюджета (upsert по user_id)
+export async function setTotalBudget(total: number): Promise<{ ok: boolean }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  const normalized = Number.isFinite(total) ? Math.max(0, total) : 0;
+
+  await sql`
+    INSERT INTO budget_totals (user_id, total)
+    VALUES (${userId}, ${normalized})
+    ON CONFLICT (user_id)
+    DO UPDATE SET total = EXCLUDED.total, updated_at = now()
+  `;
+  return { ok: true };
+}
+
+// Добавление новой статьи
+export async function addBudgetItem(title: string): Promise<BudgetItemRow> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  const t = String(title || "").trim();
+  if (!t) throw new Error("Пустой заголовок");
+
+  const rows = await sql<BudgetItemRow[]>`
+    INSERT INTO budget_items (user_id, title, percent)
+    VALUES (${userId}, ${t}, 0)
+    RETURNING id, title, percent::float AS percent
+  `;
+  return rows[0];
+}
+
+// Обновление процента статьи
+export async function updateBudgetItemPercent(
+  id: string,
+  percent: number
+): Promise<{ ok: boolean }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  const p = Number.isFinite(percent) ? Math.max(0, Math.min(percent, 100)) : 0;
+
+  await sql`
+    UPDATE budget_items
+    SET percent = ${p}, updated_at = now()
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+  return { ok: true };
+}
+
+// Удаление статьи
+export async function deleteBudgetItem(id: string): Promise<{ ok: boolean }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("Unauthorized");
+
+  await sql`
+    DELETE FROM budget_items
+    WHERE id = ${id} AND user_id = ${userId}
+  `;
+  return { ok: true };
+}
+
+// graph ========================================================================================
 // Тип точки, совпадающий с RawPoint на клиенте
 export type GraphPoint = {
   id: string;
@@ -154,6 +259,7 @@ export async function deleteGraphPoint(id: string): Promise<{ ok: boolean }> {
   `;
   return { ok: true };
 }
+// ============================================================================================
 
 // Создание задачи - добавляем в НАЧАЛО списка
 export async function createTodoFetch(formData: FormData) {
