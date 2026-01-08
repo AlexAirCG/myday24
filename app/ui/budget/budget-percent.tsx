@@ -26,24 +26,6 @@ function debounce<Args extends unknown[]>(
     }, ms);
   };
 }
-// function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number) {
-//   let timer: ReturnType<typeof setTimeout> | null = null;
-
-//   return (...args: Parameters<T>) => {
-//     if (timer !== null) {
-//       clearTimeout(timer);
-//     }
-//     timer = setTimeout(() => fn(...args), ms);
-//   };
-// }
-
-// function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
-//   let timer: any;
-//   return (...args: Parameters<T>) => {
-//     clearTimeout(timer);
-//     timer = setTimeout(() => fn(...args), ms);
-//   };
-// }
 
 export default function BudgetPercent() {
   const [items, setItems] = useState<BudgetItem[]>([]);
@@ -312,3 +294,24 @@ export default function BudgetPercent() {
     </div>
   );
 }
+// function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number) {
+//   let timer: ReturnType<typeof setTimeout> | null = null;
+
+//   return (...args: Parameters<T>) => {
+//     if (timer !== null) {
+//       clearTimeout(timer);
+//     }
+//     timer = setTimeout(() => fn(...args), ms);
+//   };
+// }
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// исходная версия с any
+/* eslint-enable @typescript-eslint/no-explicit-any */
+// function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
+//   let timer: any;
+//   return (...args: Parameters<T>) => {
+//     clearTimeout(timer);
+//     timer = setTimeout(() => fn(...args), ms);
+//   };
+// }
