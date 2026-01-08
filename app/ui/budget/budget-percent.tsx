@@ -21,7 +21,6 @@ function debounce<Args extends unknown[]>(
       clearTimeout(timer);
     }
     timer = setTimeout(() => {
-      // игнорируем промис, если fn async
       void fn(...args);
     }, ms);
   };
@@ -34,7 +33,6 @@ export default function BudgetPercent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [savingTotal, setSavingTotal] = useState<boolean>(false);
 
-  // Первичная загрузка из БД
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -67,7 +65,6 @@ export default function BudgetPercent() {
     };
   }, []);
 
-  // Дебаунс сохранения общей суммы бюджета
   const debouncedSaveTotal = React.useMemo(
     () =>
       debounce(async (val: number) => {
@@ -106,7 +103,6 @@ export default function BudgetPercent() {
     }
     setNewTitle("");
 
-    // Оптимистично добавим временный элемент, пока ждём id
     const tempId = `temp-${Date.now()}`;
     setItems((prev) => [...prev, { id: tempId, title, percent: 0 }]);
 
@@ -119,13 +115,11 @@ export default function BudgetPercent() {
       if (!res.ok) throw new Error("Failed to add item");
       const row: BudgetItem = await res.json();
 
-      // Заменим временный элемент на элемент с реальным id
       setItems((prev) =>
         prev.map((it) => (it.id === tempId ? { ...row } : it))
       );
     } catch (e) {
       console.error(e);
-      // Откат — уберём временный элемент
       setItems((prev) => prev.filter((it) => it.id !== tempId));
       alert("Не удалось добавить статью");
     }
@@ -138,7 +132,6 @@ export default function BudgetPercent() {
     const target = items[index];
     if (!target) return;
 
-    // Оптимистичное обновление
     setItems((prev) =>
       prev.map((it, i) => (i === index ? { ...it, percent: normalized } : it))
     );
@@ -152,7 +145,6 @@ export default function BudgetPercent() {
     } catch (e) {
       console.error(e);
       alert("Не удалось сохранить процент");
-      // (по желанию) можно перезагрузить из БД
     }
   };
 
@@ -160,7 +152,6 @@ export default function BudgetPercent() {
     const target = items[index];
     if (!target) return;
 
-    // Оптимистично удалить
     setItems((prev) => prev.filter((_, i) => i !== index));
 
     try {
@@ -171,7 +162,6 @@ export default function BudgetPercent() {
     } catch (e) {
       console.error(e);
       alert("Не удалось удалить статью");
-      // Откат
       setItems((prev) => {
         const copy = [...prev];
         copy.splice(index, 0, target);
@@ -180,7 +170,6 @@ export default function BudgetPercent() {
     }
   };
 
-  // Derived values
   const totalUsedPercent = useMemo(
     () => items.reduce((acc, it) => acc + (Number(it.percent) || 0), 0),
     [items]
@@ -194,7 +183,7 @@ export default function BudgetPercent() {
   return (
     <div
       id="container"
-      className="max-h-[500px] overflow-y-auto border-2 border-gray-400 p-[10px] rounded-[5px] bg-blue-600 bg-gradient-to-br from-blue-200 to-blue-600"
+      className="w-full max-w-full overflow-x-hidden sm:max-w-md mx-auto max-h-[80vh] sm:max-h-[500px] overflow-y-auto border-2 border-gray-400 p-[10px] rounded-[5px] bg-blue-600 bg-gradient-to-br from-blue-200 to-blue-600 box-border"
     >
       <div
         id="title"
@@ -210,7 +199,7 @@ export default function BudgetPercent() {
         <input
           id="sumInput"
           type="number"
-          className="rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          className="w-full sm:w-auto rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           value={
             !Number.isFinite(totalBudget) || totalBudget === 0
               ? ""
@@ -231,11 +220,13 @@ export default function BudgetPercent() {
           return (
             <div
               key={item.id}
-              className="itemBudget flex items-center mb-2 bg-white border-2 border-gray-500 rounded shadow-[0_4px_8px_rgba(0,0,0,0.3)] p-1"
+              className="itemBudget flex flex-wrap items-center gap-2 mb-2 bg-white border-2 border-gray-500 rounded shadow-[0_4px_8px_rgba(0,0,0,0.3)] p-2"
             >
-              <div className="itemBudgetTitle mr-2 ml-2">{item.title}</div>
+              <div className="itemBudgetTitle flex-1 min-w-0 mr-2 ml-2 truncate">
+                {item.title}
+              </div>
               <input
-                className="itemPercent w-[40px] rounded-md bg-white border-gray-500 border-2 px-2 py-1 text-sm  focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="itemPercent w-10 shrink-0 rounded-md bg-white border-gray-500 border-2 px-2 py-1 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 type="number"
                 value={
                   !Number.isFinite(item.percent) || item.percent === 0
@@ -248,10 +239,12 @@ export default function BudgetPercent() {
                 onChange={(e) => updateItemPercent(index, e.target.value)}
                 placeholder="%"
               />
-              <div className="percent">% =</div>
-              <div className="sumItem mr-2 ml-2">{itemSum.toFixed(2)}</div>
+              <div className="percent shrink-0">%</div>
+              <div className="sumItem mr-2 ml-2 shrink-0">
+                {itemSum.toFixed(2)}
+              </div>
               <button
-                className="p-1 ml-auto border-gray-500 border-2 rounded hover:border-red-700 cursor-pointer active:bg-red-700 transition-colors duration-150 ease-out"
+                className="p-1 ml-auto shrink-0 border-gray-500 border-2 rounded hover:border-red-700 cursor-pointer active:bg-red-700 transition-colors duration-150 ease-out"
                 onClick={() => deleteItem(index)}
               >
                 <IoTrashOutline className="w-5 h-5 hover:text-red-700" />
@@ -264,7 +257,7 @@ export default function BudgetPercent() {
         )}
       </div>
 
-      <div className="percentInf flex w-[150px] gap-[5px] mt-1 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+      <div className="percentInf flex w-full sm:w-[150px] gap-[5px] mt-1 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
         <div>Осталось %</div>
         <div className={percentRemaining < 0 ? "text-red-600" : "text-black"}>
           {Number.isFinite(percentRemaining) ? percentRemaining : 0}
@@ -275,17 +268,17 @@ export default function BudgetPercent() {
         <div id="newBudgetTitle" className="mb-1">
           Добавить статью бюджета
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             id="titleInput"
-            className="rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="flex-1 min-w-0 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             value={newTitle}
             onChange={handleNewTitleChange}
             placeholder="Название статьи"
           />
           <Button
             id="titleBtn"
-            className="mt-1 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)]"
+            className="mt-1 shrink-0 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)]"
             onClick={addItem}
           >
             Добавить
