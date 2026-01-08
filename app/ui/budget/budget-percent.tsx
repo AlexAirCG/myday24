@@ -193,10 +193,13 @@ export default function BudgetPercent() {
 
   return (
     <div
-      id="container max-h-[500px] overflow-y-auto"
-      className="bg-white border-2 border-gray-400 p-[10px] rounded-[5px] w-fit"
+      id="container"
+      className="max-h-[500px] overflow-y-auto border-2 border-gray-400 p-[10px] rounded-[5px] bg-blue-600 bg-gradient-to-br from-blue-200 to-blue-600"
     >
-      <div id="title" className="text-[18px] mb-[5px] text-center">
+      <div
+        id="title"
+        className="text-[18px] mb-[5px] text-center text-white text-shadow-lg/40"
+      >
         Бюджет
       </div>
 
@@ -207,9 +210,12 @@ export default function BudgetPercent() {
         <input
           id="sumInput"
           type="number"
-          inputMode="decimal"
           className="rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          value={Number.isFinite(totalBudget) ? totalBudget : ""}
+          value={
+            !Number.isFinite(totalBudget) || totalBudget === 0
+              ? ""
+              : String(totalBudget)
+          }
           onChange={handleTotalBudgetChange}
           placeholder={loading ? "Загрузка..." : "0"}
         />
@@ -225,32 +231,27 @@ export default function BudgetPercent() {
           return (
             <div
               key={item.id}
-              className="itemBudget flex items-center mb-2 border-2 border-gray-500 rounded shadow-[0_4px_8px_rgba(0,0,0,0.3)] p-1 w-fit"
+              className="itemBudget flex items-center mb-2 bg-white border-2 border-gray-500 rounded shadow-[0_4px_8px_rgba(0,0,0,0.3)] p-1"
             >
               <div className="itemBudgetTitle mr-2 ml-2">{item.title}</div>
               <input
-                className="itemPercent w-[90px] rounded-md bg-white border-gray-500 border-2 px-2 py-1 text-sm  focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="itemPercent w-[40px] rounded-md bg-white border-gray-500 border-2 px-2 py-1 text-sm  focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 type="number"
-                inputMode="numeric"
+                value={
+                  !Number.isFinite(item.percent) || item.percent === 0
+                    ? ""
+                    : String(item.percent)
+                }
                 min={0}
                 max={100}
-                value={Number.isFinite(item.percent) ? item.percent : ""}
+                step={0.01}
                 onChange={(e) => updateItemPercent(index, e.target.value)}
                 placeholder="%"
               />
               <div className="percent">% =</div>
               <div className="sumItem mr-2 ml-2">{itemSum.toFixed(2)}</div>
-              {/* <Button
-                onClick={() => deleteItem(index)}
-                className="btnDelet rounded-md bg-red-500 hover:bg-red-600 text-white px-3 py-1 text-sm"
-              >
-                Удалить
-              </Button> */}
               <button
-                className="p-1 border-gray-500 border-2 rounded hover:border-red-700 cursor-pointer active:bg-red-700 transition-colors duration-150 ease-out"
-                // type="submit"
-                // aria-label="Удалить"
-                // title="Удалить"
+                className="p-1 ml-auto border-gray-500 border-2 rounded hover:border-red-700 cursor-pointer active:bg-red-700 transition-colors duration-150 ease-out"
                 onClick={() => deleteItem(index)}
               >
                 <IoTrashOutline className="w-5 h-5 hover:text-red-700" />
@@ -263,7 +264,7 @@ export default function BudgetPercent() {
         )}
       </div>
 
-      <div className="percentInf flex w-fit gap-[5px] mt-1 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+      <div className="percentInf flex w-[150px] gap-[5px] mt-1 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
         <div>Осталось %</div>
         <div className={percentRemaining < 0 ? "text-red-600" : "text-black"}>
           {Number.isFinite(percentRemaining) ? percentRemaining : 0}
@@ -271,13 +272,13 @@ export default function BudgetPercent() {
       </div>
 
       <div id="newBudgetItem" className="mt-3">
-        <div id="newBudgetTitle" className="mb-1.5">
+        <div id="newBudgetTitle" className="mb-1">
           Добавить статью бюджета
         </div>
         <div className="flex items-center gap-2">
           <input
             id="titleInput"
-            className="mt-1 rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="rounded-md bg-white border-gray-500 border-2 px-3 py-2 text-sm shadow-[0_4px_8px_rgba(0,0,0,0.3)] focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             value={newTitle}
             onChange={handleNewTitleChange}
             placeholder="Название статьи"
@@ -294,24 +295,3 @@ export default function BudgetPercent() {
     </div>
   );
 }
-// function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number) {
-//   let timer: ReturnType<typeof setTimeout> | null = null;
-
-//   return (...args: Parameters<T>) => {
-//     if (timer !== null) {
-//       clearTimeout(timer);
-//     }
-//     timer = setTimeout(() => fn(...args), ms);
-//   };
-// }
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// исходная версия с any
-/* eslint-enable @typescript-eslint/no-explicit-any */
-// function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
-//   let timer: any;
-//   return (...args: Parameters<T>) => {
-//     clearTimeout(timer);
-//     timer = setTimeout(() => fn(...args), ms);
-//   };
-// }
