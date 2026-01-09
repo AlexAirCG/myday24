@@ -16,7 +16,7 @@ export default async function Layout({
         {/* ✅ Передаем строку/nullable */}
         <SideNav email={email} />
       </div>
-      <div className="flex-1 min-h-0 bg-sky-200 p-3 md:p-12 overflow-hidden">
+      <div className="flex-1 min-h-0 bg-sky-200 p-2 md:p-12 overflow-hidden">
         {children}
       </div>
     </div>
