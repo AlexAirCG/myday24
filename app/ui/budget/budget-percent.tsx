@@ -183,7 +183,7 @@ export default function BudgetPercent() {
   return (
     <div
       id="container"
-      className="w-full max-w-full overflow-x-hidden sm:max-w-md mx-auto max-h-[80vh] sm:max-h-[500px] overflow-y-auto border-2 border-gray-400 p-[10px] rounded-[5px] bg-blue-600 bg-gradient-to-br from-blue-200 to-blue-600 box-border"
+      className="w-full max-w-full overflow-x-hidden sm:max-w-md mx-auto max-h-[80vh] sm:max-h-[500px] overflow-y-auto border-2 border-gray-400 p-1 rounded-[5px] bg-blue-600 bg-gradient-to-br from-blue-200 to-blue-600 box-border"
     >
       <div
         id="title"
@@ -220,7 +220,7 @@ export default function BudgetPercent() {
           return (
             <div
               key={item.id}
-              className="itemBudget flex flex-wrap items-center gap-2 mb-2 bg-white border-2 border-gray-500 rounded shadow-[0_4px_8px_rgba(0,0,0,0.3)] p-2"
+              className="itemBudget flex flex-wrap items-center gap-1 mb-2 bg-white border-2 border-gray-500 rounded shadow-[0_4px_8px_rgba(0,0,0,0.3)] p-1"
             >
               <div className="itemBudgetTitle flex-1 min-w-0 mr-2 ml-2 truncate">
                 {item.title}
